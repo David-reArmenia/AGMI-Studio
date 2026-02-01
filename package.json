@@ -9,11 +9,11 @@
     "preview": "vite preview"
   },
   "dependencies": {
+    "@google/genai": "^1.38.0",
+    "mammoth": "^1.11.0",
+    "pdfjs-dist": "^4.10.38",
     "react": "^19.2.4",
-    "react-dom": "^19.2.4",
-    "mammoth": "1.6.0",
-    "pdfjs-dist": "4.0.379",
-    "@google/genai": "^1.38.0"
+    "react-dom": "^19.2.4"
   },
   "devDependencies": {
     "@types/node": "^22.14.0",

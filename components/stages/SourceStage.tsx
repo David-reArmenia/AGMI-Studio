@@ -7,7 +7,7 @@ import * as pdfjsLib from 'pdfjs-dist';
 import { GoogleGenAI, Type, Modality } from "@google/genai";
 
 // Configure PDF.js worker
-pdfjsLib.GlobalWorkerOptions.workerSrc = `https://esm.sh/pdfjs-dist@4.0.379/build/pdf.worker.mjs`;
+pdfjsLib.GlobalWorkerOptions.workerSrc = `https://esm.sh/pdfjs-dist@4.10.38/build/pdf.worker.mjs`;
 
 function decode(base64: string) {
   const binaryString = atob(base64);
