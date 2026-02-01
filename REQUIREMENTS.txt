@@ -1,0 +1,271 @@
+Design a web-based enterprise application for the Armenian Genocide Museum that helps museum staff create multi-language audio guides from source documents. The product is a 3-stage guided workflow with tabs, plus a Project Dashboard to manage saved guides. The UI must be professional, accessible, and optimized for long-form text editing and review.
+
+Overall Structure
+
+Top navigation:
+
+Dashboard
+
+Source Materials
+
+Translation
+
+TTS & Audio Output
+
+Dictionaries & Terms (optional as a separate view OR as a panel within stages)
+
+Each stage should show a stepper and progress indicators for long-running operations.
+
+Each project has:
+
+Project name, ID, creation date, last modified, status (Draft / Translating / TTS Generating / Ready)
+
+Source language (strict), target languages (one or many), term dictionary status, export status
+
+Key Requirements Across All Stages
+
+Show progress for: file upload, document parsing, term detection, translation, audio generation, export packaging
+
+Strict source language lock: a project must use exactly one source language (no mixing). Supported initially: Armenian, English, Russian
+
+Support import formats: .md, .pdf, .doc/.docx, .txt
+
+Staff can upload special dictionary files; uploading triggers AI structuring into a standardized JSON.
+
+Detect and manage special terms in text:
+
+Toponyms
+
+Ethnonyms
+
+Historical Terms
+
+Figures
+
+Dates
+
+Detected terms must be:
+
+Highlighted in text
+
+Editable manually and with AI assistance
+
+Exportable as structured JSON
+
+Mergeable with uploaded dictionary files
+
+Dictionary JSON must include per term:
+
+Category
+
+Source spelling
+
+Target language forms (when available)
+
+Phonetic pronunciation hints / transliteration / IPA for source and target
+
+Notes, confidence, validation status
+
+Screen 1: Project Dashboard
+
+Purpose: manage existing audio guide projects.
+
+Table/grid of projects with filters: status, source language, target languages, date, search.
+
+Project cards show a progress bar of overall workflow completion.
+
+Actions: Create new project, Duplicate, Archive, Export, Open.
+
+“Create project” modal:
+
+Project name
+
+Choose source language (Armenian/English/Russian)
+
+Select one or multiple target languages (global list)
+
+Optional: upload initial documents + dictionary
+
+Tab 1: Source Materials (Upload + Text Processing + Term Detection)
+
+Layout: 3-column workspace.
+
+Left panel: Sources
+
+Upload area for documents (drag/drop) with file list, type icon, upload progress, parsing status
+
+Buttons: Add files, Remove, Reorder, Combine selections
+
+Strict language indicator: “Source language locked: Armenian/English/Russian”
+
+Center panel: Editor
+
+Large document editor with sections, headings, merge view, version history
+
+Tools:
+
+Manual edit
+
+AI assist: summarize, rewrite, simplify, merge selected, remove duplicates, style normalization
+
+“Combine sources” into a single curated script
+
+Highlight detected terms inline (color-coded by category)
+
+Right panel: Term Detection & Dictionary
+
+“Run Term Detection” button with progress bar + logs
+
+Term list grouped by category (Toponyms, Ethnonyms, Historical Terms, Figures, Dates)
+
+Each term row: confidence, occurrences, edit button, pronunciation fields
+
+Upload dictionary file button → triggers “Smart AI processing”
+
+Merge options:
+
+Merge detected + uploaded
+
+Resolve conflicts UI (side-by-side suggestions)
+
+Export dictionary button: Download JSON
+
+Bottom action bar:
+
+Back/Save Draft
+
+Submit to Translation (locks source script version)
+
+Tab 2: Translation (Multi-language + Term Validation + Phonetic Refinement)
+
+Goal: translate curated script into one or multiple target languages with term consistency.
+
+Layout: split screen with an additional dictionary refinement panel.
+
+Top: Target language selector (multi-select), translation status per language, progress bars.
+
+Main area:
+
+Left pane: Source script (read-only, with highlighted terms)
+
+Right pane: Target translation editor (editable)
+
+Toggle: side-by-side / stacked view
+
+Term consistency features:
+
+Term glossary sidebar showing expected translations/transliterations per target language
+
+Warnings when translation deviates from glossary or term detection
+
+“AI Assist” in this phase:
+
+Improve translation tone
+
+Fix consistency for toponyms/ethnonyms
+
+Generate phonetic hints for target language (e.g., Arabic/Chinese/Japanese)
+
+Dictionary JSON refinement:
+
+Dedicated panel to edit:
+
+Target-language term forms
+
+IPA/transcription fields
+
+Notes and approval
+
+Mark terms as Approved/Needs Review
+
+Bottom action bar:
+
+Save
+
+Proceed to TTS & Audio Output (locks translation version per language)
+
+Tab 3: TTS & Audio Output (Vendor-specific Voices + SSML Preview + Generation)
+
+Goal: generate high-quality audio files with advanced speech controls.
+
+Layout: settings dashboard + preview + output queue.
+
+Left panel: Vendor + Voice Profile
+
+Vendor dropdown: Google TTS, ElevenLabs, Qwen, Other
+
+Vendor selection dynamically changes:
+
+Available voices
+
+Voice cloning / voice creation options
+
+Supported SSML features
+
+Voice profile card: sample playback, tags (gender/age/style), language compatibility
+
+Center panel: Speech Controls (sliders + advanced settings)
+
+Sliders:
+
+Emphasis (dramatic stress)
+
+Gravity (Somberness)
+
+Pacing
+
+Pause distribution
+
+Additional options:
+
+Pronunciation strictness (use dictionary strongly vs softly)
+
+Segmenting (by paragraph / by section)
+
+Noise reduction / normalization toggle (if applicable)
+
+Right panel: SSML / Vendor Preview
+
+“SSML Preview” window showing how dictionary phonetics become vendor SSML (e.g., )
+
+Warnings for unsupported tags per vendor and auto-fallback
+
+Output section:
+
+Audio format selector (mp3/wav/ogg), bitrate/quality
+
+Generate button with multi-stage progress (preprocessing → SSML compile → synth → package)
+
+Output file list per target language with status, download, regenerate, audit log
+
+Bottom action bar:
+
+Save settings
+
+Generate
+
+Export final package (audio + script + dictionary JSON + metadata)
+
+Visual & UX Style
+
+Museum-grade, serious tone; minimal but modern design (clean typography, calm color palette)
+
+Accessibility: high contrast options, keyboard-friendly editor controls
+
+Use clear status chips, progress bars, and activity logs for AI operations
+
+Provide confirmation dialogs when locking versions between stages
+
+Deliverables Requested from Stitch
+
+High-fidelity mockups for:
+
+Dashboard
+
+Source Materials tab (with term detection + dictionary merge UI)
+
+Translation tab (multi-language + glossary validation)
+
+TTS tab (vendor-dependent voice options + SSML preview + generation queue)
+
+Include a reusable component set: stepper, progress modal, term card, conflict resolver, SSML preview widget.

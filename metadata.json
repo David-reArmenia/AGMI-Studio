@@ -1,0 +1,8 @@
+{
+  "name": "AGMI Localization Hub",
+  "description": "Professional enterprise platform for the Armenian Genocide Museum-Institute to create, translate, and produce multi-language audio guides.",
+  "requestFramePermissions": [
+    "camera",
+    "microphone"
+  ]
+}

@@ -1,0 +1,73 @@
+
+<!DOCTYPE html>
+<html lang="en" class="dark">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>AGMI Localization Hub</title>
+    <script src="https://cdn.tailwindcss.com?plugins=forms,container-queries"></script>
+    <link href="https://fonts.googleapis.com/css2?family=Inter:wght@400;500;600;700;800;900&display=swap" rel="stylesheet">
+    <link href="https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:wght,FILL@100..700,0..1&display=swap" rel="stylesheet">
+    <script>
+        tailwind.config = {
+            darkMode: "class",
+            theme: {
+                extend: {
+                    colors: {
+                        "primary": "#197fe6",
+                        "museum-gold": "#c4a47c",
+                        "background-dark": "#0f1419",
+                        "surface-dark": "#1a222a",
+                        "border-dark": "#2d3a48",
+                    },
+                    fontFamily: {
+                        "sans": ["Inter", "sans-serif"]
+                    }
+                }
+            }
+        }
+    </script>
+    <style>
+        .material-symbols-outlined {
+            font-variation-settings: 'FILL' 0, 'wght' 300, 'GRAD' 0, 'opsz' 24;
+        }
+        body {
+            background-color: #0f1419;
+            color: #e1e1e1;
+            overflow: hidden;
+        }
+        ::-webkit-scrollbar { width: 6px; height: 6px; }
+        ::-webkit-scrollbar-track { background: transparent; }
+        ::-webkit-scrollbar-thumb { background: #2d3a48; border-radius: 10px; }
+        ::-webkit-scrollbar-thumb:hover { background: #197fe6; }
+
+        .term-toponym { border-bottom: 2px solid #3b82f6; background-color: rgba(59, 130, 246, 0.15); color: #93c5fd; font-weight: 600; padding: 0 2px; }
+        .term-figure { border-bottom: 2px solid #10b981; background-color: rgba(16, 185, 129, 0.15); color: #6ee7b7; font-weight: 600; padding: 0 2px; }
+        .term-ethnonym { border-bottom: 2px solid #a855f7; background-color: rgba(168, 85, 247, 0.15); color: #d8b4fe; font-weight: 600; padding: 0 2px; }
+        .term-historical_term { border-bottom: 2px solid #f59e0b; background-color: rgba(245, 158, 11, 0.15); color: #fcd34d; font-weight: 600; padding: 0 2px; }
+        .term-date { border-bottom: 2px solid #f43f5e; background-color: rgba(244, 63, 94, 0.15); color: #fda4af; font-weight: 600; padding: 0 2px; }
+
+        /* Custom scrollbar for content area */
+        .custom-scrollbar::-webkit-scrollbar { width: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb { background: #1a222a; border-radius: 4px; }
+        .custom-scrollbar::-webkit-scrollbar-thumb:hover { background: #197fe6; }
+    </style>
+<script type="importmap">
+{
+  "imports": {
+    "react/": "https://esm.sh/react@^19.2.4/",
+    "react": "https://esm.sh/react@^19.2.4",
+    "react-dom/": "https://esm.sh/react-dom@^19.2.4/",
+    "mammoth": "https://esm.sh/mammoth@1.6.0",
+    "pdfjs-dist": "https://esm.sh/pdfjs-dist@4.0.379",
+    "@google/genai": "https://esm.sh/@google/genai@^1.38.0"
+  }
+}
+</script>
+<link rel="stylesheet" href="/index.css">
+</head>
+<body class="min-h-screen">
+    <div id="root"></div>
+<script type="module" src="/index.tsx"></script>
+</body>
+</html>
