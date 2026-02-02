@@ -31,7 +31,7 @@ const Dashboard: React.FC<DashboardProps> = ({ projects, onOpenProject, onDelete
   ];
 
   const getStatusColor = (status: WorkflowStatus) => {
-    switch(status) {
+    switch (status) {
       case WorkflowStatus.READY: return 'text-emerald-500';
       case WorkflowStatus.TTS_GENERATING: return 'text-primary';
       case WorkflowStatus.TRANSLATING: return 'text-amber-500';
@@ -40,12 +40,49 @@ const Dashboard: React.FC<DashboardProps> = ({ projects, onOpenProject, onDelete
   };
 
   const getBarColor = (status: WorkflowStatus) => {
-    switch(status) {
+    switch (status) {
       case WorkflowStatus.READY: return 'bg-emerald-500';
       case WorkflowStatus.TTS_GENERATING: return 'bg-primary';
       case WorkflowStatus.TRANSLATING: return 'bg-amber-500';
       default: return 'bg-slate-700';
     }
+  };
+
+  // Calculate progress based on actual project phase completion
+  const calculateProgress = (proj: Project): number => {
+    let progress = 0;
+
+    // Phase 1: Source Materials (0-33%)
+    // Has assets = 33%
+    if (proj.assets && proj.assets.length > 0) {
+      const parsedAssets = proj.assets.filter(a => a.status === 'PARSED').length;
+      const assetProgress = proj.assets.length > 0 ? (parsedAssets / proj.assets.length) * 33 : 0;
+      progress = Math.round(assetProgress);
+    }
+
+    // Phase 2: Translation (34-66%)
+    // Has translations for target languages
+    if (proj.translations && Object.keys(proj.translations).length > 0) {
+      const completedTranslations = Object.values(proj.translations).filter(
+        t => t.status === 'COMPLETED' || (t.content && t.content.length > 0)
+      ).length;
+      const translationProgress = proj.targetLangs.length > 0
+        ? (completedTranslations / proj.targetLangs.length) * 33
+        : 0;
+      progress = 33 + Math.round(translationProgress);
+    }
+
+    // Phase 3: Audio Production (67-100%)
+    // Has generated audio outputs
+    if (proj.audioOutputs && proj.audioOutputs.length > 0) {
+      const completedAudios = proj.audioOutputs.filter(a => a.status === 'completed').length;
+      // Consider 1 audio per target language as 100%
+      const expectedAudios = proj.targetLangs.length || 1;
+      const audioProgress = Math.min((completedAudios / expectedAudios) * 34, 34);
+      progress = 66 + Math.round(audioProgress);
+    }
+
+    return Math.min(progress, 100);
   };
 
   const triggerDelete = (project: Project) => {
@@ -80,7 +117,7 @@ const Dashboard: React.FC<DashboardProps> = ({ projects, onOpenProject, onDelete
   };
 
   const toggleTargetLang = (code: string) => {
-    setNewTargetLangs(prev => 
+    setNewTargetLangs(prev =>
       prev.includes(code) ? prev.filter(c => c !== code) : [...prev, code]
     );
   };
@@ -92,7 +129,7 @@ const Dashboard: React.FC<DashboardProps> = ({ projects, onOpenProject, onDelete
           <h1 className="text-3xl font-black tracking-tight text-white">Project Dashboard</h1>
           <p className="text-slate-500 mt-1">Manage multi-language audio guide production</p>
         </div>
-        <button 
+        <button
           onClick={() => setShowCreateModal(true)}
           className="flex items-center gap-2 px-5 py-2.5 bg-primary text-white font-bold rounded hover:bg-primary/90 transition-all shadow-lg shadow-primary/20"
         >
@@ -140,23 +177,23 @@ const Dashboard: React.FC<DashboardProps> = ({ projects, onOpenProject, onDelete
                     <div className="flex flex-col gap-1.5 min-w-[140px]">
                       <div className={`flex items-center justify-between text-[9px] font-black uppercase tracking-widest ${getStatusColor(proj.status)}`}>
                         <span>{proj.status.replace('_', ' ')}</span>
-                        <span>{proj.progress}%</span>
+                        <span>{calculateProgress(proj)}%</span>
                       </div>
                       <div className="h-1 w-full bg-border-dark rounded-full overflow-hidden">
-                        <div className={`h-full transition-all duration-1000 ${getBarColor(proj.status)}`} style={{ width: `${proj.progress}%` }}></div>
+                        <div className={`h-full transition-all duration-1000 ${getBarColor(proj.status)}`} style={{ width: `${calculateProgress(proj)}%` }}></div>
                       </div>
                     </div>
                   </td>
                   <td className="px-6 py-5">
                     <div className="flex items-center gap-2">
-                      <button 
+                      <button
                         onClick={() => onOpenProject(proj)}
                         className="flex items-center gap-1.5 px-3 py-1.5 bg-background-dark hover:bg-primary hover:text-white border border-border-dark text-[#93adc8] rounded text-[10px] font-bold uppercase tracking-widest transition-all"
                       >
                         Open
                         <span className="material-symbols-outlined text-xs">arrow_forward</span>
                       </button>
-                      <button 
+                      <button
                         onClick={() => triggerDelete(proj)}
                         className="p-1.5 text-[#5a7187] hover:text-red-500 hover:bg-red-500/10 rounded transition-all"
                         title="Delete Project"
@@ -190,11 +227,11 @@ const Dashboard: React.FC<DashboardProps> = ({ projects, onOpenProject, onDelete
               <h3 className="text-xl font-bold text-white mb-1 uppercase tracking-tight">Initialize New Project</h3>
               <p className="text-[#93adc8] text-[11px] font-medium uppercase tracking-widest">Localization & Production Suite</p>
             </div>
-            
+
             <form onSubmit={handleCreateProject} className="px-8 pb-8 space-y-6">
               <div className="space-y-2">
                 <label className="text-[10px] font-black uppercase tracking-widest text-[#5a7187]">Project Title</label>
-                <input 
+                <input
                   autoFocus
                   required
                   value={newName}
@@ -207,7 +244,7 @@ const Dashboard: React.FC<DashboardProps> = ({ projects, onOpenProject, onDelete
               <div className="grid grid-cols-2 gap-4">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-[#5a7187]">Source Language</label>
-                  <select 
+                  <select
                     value={newSourceLang}
                     onChange={(e) => setNewSourceLang(e.target.value)}
                     className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary focus:border-transparent transition-all outline-none text-white"
@@ -232,11 +269,10 @@ const Dashboard: React.FC<DashboardProps> = ({ projects, onOpenProject, onDelete
                       key={lang.code}
                       type="button"
                       onClick={() => toggleTargetLang(lang.code)}
-                      className={`py-2 px-1 rounded border text-[10px] font-black uppercase tracking-tighter transition-all ${
-                        newTargetLangs.includes(lang.code)
-                          ? 'bg-primary border-primary text-white'
-                          : 'bg-background-dark border-border-dark text-[#5a7187] hover:border-[#93adc8]'
-                      }`}
+                      className={`py-2 px-1 rounded border text-[10px] font-black uppercase tracking-tighter transition-all ${newTargetLangs.includes(lang.code)
+                        ? 'bg-primary border-primary text-white'
+                        : 'bg-background-dark border-border-dark text-[#5a7187] hover:border-[#93adc8]'
+                        }`}
                     >
                       {lang.name}
                     </button>
@@ -245,14 +281,14 @@ const Dashboard: React.FC<DashboardProps> = ({ projects, onOpenProject, onDelete
               </div>
 
               <div className="flex gap-4 pt-4">
-                <button 
+                <button
                   type="button"
                   onClick={() => setShowCreateModal(false)}
                   className="flex-1 py-3 bg-background-dark border border-border-dark text-[#93adc8] font-black text-[10px] uppercase tracking-widest rounded hover:bg-surface-dark hover:text-white transition-all"
                 >
                   Cancel
                 </button>
-                <button 
+                <button
                   type="submit"
                   className="flex-1 py-3 bg-primary text-white font-black text-[10px] uppercase tracking-widest rounded hover:bg-primary/90 transition-all shadow-lg shadow-primary/20"
                 >
@@ -276,13 +312,13 @@ const Dashboard: React.FC<DashboardProps> = ({ projects, onOpenProject, onDelete
               Are you sure you want to delete <span className="text-white font-bold">{projectToDelete?.name}</span>? This action is permanent and will remove all source documents, translations, and generated audio artifacts from the museum repository.
             </p>
             <div className="flex gap-4">
-              <button 
+              <button
                 onClick={() => setShowDeleteModal(false)}
                 className="flex-1 py-3 bg-background-dark border border-border-dark text-[#93adc8] font-black text-[10px] uppercase tracking-widest rounded hover:bg-surface-dark hover:text-white transition-all"
               >
                 Cancel
               </button>
-              <button 
+              <button
                 onClick={confirmDelete}
                 className="flex-1 py-3 bg-red-600 text-white font-black text-[10px] uppercase tracking-widest rounded hover:bg-red-700 transition-all shadow-lg shadow-red-600/20"
               >

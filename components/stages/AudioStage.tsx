@@ -706,8 +706,8 @@ const AudioStage: React.FC<AudioStageProps> = ({ project, onUpdateOutputs }) => 
                 onClick={handleGenerate}
                 disabled={isGenerating || !currentTranslation?.content}
                 className={`flex items-center gap-3 px-12 py-4 font-black uppercase tracking-widest rounded text-[12px] transition-all ${isGenerating
-                  ? 'bg-museum-gold/50 text-black cursor-wait'
-                  : 'bg-museum-gold text-black hover:bg-museum-gold/90 shadow-lg shadow-museum-gold/20'
+                  ? 'bg-orange-500/50 text-white cursor-wait'
+                  : 'bg-orange-500 text-white hover:bg-orange-600 shadow-lg shadow-orange-500/30'
                   } ${!currentTranslation?.content ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
                 <span className="material-symbols-outlined">{isGenerating ? 'hourglass_top' : 'record_voice_over'}</span>
