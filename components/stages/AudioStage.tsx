@@ -1,4 +1,4 @@
-import React, { useState, useMemo, useCallback } from 'react';
+import React, { useState, useMemo, useCallback, useRef } from 'react';
 import { Project, TTSVendor, TTSSettings, VoiceProfile, AudioOutput, Term } from '../../types';
 import { TTS_VENDORS, VOICE_PROFILES, getVoicesForVendor, getVendorConfig } from '../../constants/tts';
 import { generateSSMLPreview, getSSMLWarnings, vendorSupportsSSML } from '../../utils/ssml';
@@ -60,6 +60,10 @@ const AudioStage: React.FC<AudioStageProps> = ({ project }) => {
   const [generationProgress, setGenerationProgress] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
 
+  // Refs for audio playback control
+  const audioSourceRef = useRef<AudioBufferSourceNode | null>(null);
+  const audioContextRef = useRef<AudioContext | null>(null);
+
   // Get current translation
   const currentTranslation = project.translations?.[activeLang];
   const currentTerms = currentTranslation?.terms || project.terms || [];
@@ -101,9 +105,32 @@ const AudioStage: React.FC<AudioStageProps> = ({ project }) => {
     setSettings(prev => ({ ...prev, [key]: value }));
   }, []);
 
+  // Stop audio playback
+  const stopAudio = useCallback(() => {
+    if (audioSourceRef.current) {
+      try {
+        audioSourceRef.current.stop();
+      } catch (e) {
+        // Ignore if already stopped
+      }
+      audioSourceRef.current = null;
+    }
+    if (audioContextRef.current) {
+      audioContextRef.current.close();
+      audioContextRef.current = null;
+    }
+    setIsPlaying(false);
+  }, []);
+
   // Handle audio preview using Gemini TTS
   const handlePreview = useCallback(async () => {
-    if (!currentTranslation?.content || isPlaying) return;
+    // If already playing, stop the audio
+    if (isPlaying) {
+      stopAudio();
+      return;
+    }
+
+    if (!currentTranslation?.content) return;
 
     setIsPlaying(true);
     try {
@@ -140,14 +167,20 @@ const AudioStage: React.FC<AudioStageProps> = ({ project }) => {
       const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
       if (base64Audio) {
         const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
+        audioContextRef.current = audioCtx;
         const audioBuffer = await decodeAudioData(decodeBase64(base64Audio), audioCtx, 24000, 1);
         const source = audioCtx.createBufferSource();
+        audioSourceRef.current = source;
         source.buffer = audioBuffer;
         source.playbackRate.value = settings.pacing;
         source.connect(audioCtx.destination);
         source.onended = () => {
           setIsPlaying(false);
-          audioCtx.close();
+          audioSourceRef.current = null;
+          if (audioContextRef.current) {
+            audioContextRef.current.close();
+            audioContextRef.current = null;
+          }
         };
         source.start();
       } else {
@@ -158,7 +191,7 @@ const AudioStage: React.FC<AudioStageProps> = ({ project }) => {
       console.error('[TTS Preview] Error:', error);
       setIsPlaying(false);
     }
-  }, [currentTranslation, currentTerms, settings, isPlaying]);
+  }, [isPlaying, currentTranslation, currentTerms, settings, stopAudio]);
 
   // Handle full audio generation
   const handleGenerate = useCallback(async () => {
@@ -435,14 +468,14 @@ const AudioStage: React.FC<AudioStageProps> = ({ project }) => {
               </div>
               <button
                 onClick={handlePreview}
-                disabled={isPlaying || !currentTranslation?.content}
+                disabled={!currentTranslation?.content}
                 className={`flex items-center gap-3 px-10 py-3 font-black uppercase tracking-widest rounded text-[11px] shadow-2xl transition-all ${isPlaying
-                  ? 'bg-primary text-white'
+                  ? 'bg-red-600 text-white hover:bg-red-700'
                   : 'bg-white text-black hover:-translate-y-0.5'
                   } ${!currentTranslation?.content ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
-                <span className="material-symbols-outlined">{isPlaying ? 'graphic_eq' : 'play_circle'}</span>
-                {isPlaying ? 'Playing...' : `Preview ${activeLang} Audio`}
+                <span className="material-symbols-outlined">{isPlaying ? 'stop_circle' : 'play_circle'}</span>
+                {isPlaying ? 'Stop Preview' : `Preview ${activeLang} Audio`}
               </button>
             </div>
 

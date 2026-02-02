@@ -308,7 +308,29 @@ const SourceStage: React.FC<SourceStageProps> = ({ assets, existingTerms, onAddA
           {assets.map((asset) => (
             <div key={asset.id} onClick={() => setSelectedAssetId(asset.id)} className={`p-3 group relative cursor-pointer rounded transition-all ${selectedAssetId === asset.id ? 'bg-primary/10 border-l-2 border-primary' : 'hover:bg-surface-dark border-l-2 border-transparent'}`}>
               <div className="flex items-start gap-3"><span className="material-symbols-outlined text-[#93adc8]">{['pdf', 'docx'].includes(asset.type) ? 'article' : 'description'}</span><p className="text-xs font-bold truncate uppercase tracking-wider text-[#93adc8]">{asset.name}</p></div>
-              <button onClick={(e) => { e.stopPropagation(); onRemoveAsset(asset.id); }} className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 p-1 text-[#5a7187] hover:text-red-500 rounded"><span className="material-symbols-outlined text-sm">close</span></button>
+              <div className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 flex gap-1">
+                <button
+                  onClick={(e) => {
+                    e.stopPropagation();
+                    // Download asset content as text file
+                    const content = asset.content || '';
+                    const blob = new Blob([content], { type: 'text/plain' });
+                    const url = URL.createObjectURL(blob);
+                    const a = document.createElement('a');
+                    a.href = url;
+                    a.download = `${asset.name.replace(/\.[^/.]+$/, '')}.txt`;
+                    a.click();
+                    URL.revokeObjectURL(url);
+                  }}
+                  className="p-1 text-[#5a7187] hover:text-primary rounded"
+                  title="Download"
+                >
+                  <span className="material-symbols-outlined text-sm">download</span>
+                </button>
+                <button onClick={(e) => { e.stopPropagation(); onRemoveAsset(asset.id); }} className="p-1 text-[#5a7187] hover:text-red-500 rounded" title="Remove">
+                  <span className="material-symbols-outlined text-sm">close</span>
+                </button>
+              </div>
             </div>
           ))}
         </div>

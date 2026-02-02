@@ -5,11 +5,11 @@ import Dashboard from './components/Dashboard';
 import ProjectEditor from './components/ProjectEditor';
 import Header from './components/Header';
 import Footer from './components/Footer';
-import { MOCK_PROJECTS } from './constants.tsx';
+// MOCK_PROJECTS available in constants.tsx if needed for testing
 import { GoogleGenAI, Type } from "@google/genai";
 
 const App: React.FC = () => {
-  const [projects, setProjects] = useState<Project[]>(MOCK_PROJECTS);
+  const [projects, setProjects] = useState<Project[]>([]);
   const [currentView, setCurrentView] = useState<'dashboard' | 'editor'>('dashboard');
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [currentStage, setCurrentStage] = useState<Stage>(Stage.SOURCE_MATERIALS);
@@ -93,7 +93,7 @@ const App: React.FC = () => {
         };
       }
 
-      handleUpdateProject(projectId, { 
+      handleUpdateProject(projectId, {
         translations: newTranslations,
         status: WorkflowStatus.TRANSLATING,
         progress: 50
@@ -114,34 +114,34 @@ const App: React.FC = () => {
 
   return (
     <div className="h-screen flex flex-col bg-background-dark text-[#e1e1e1]">
-      <Header 
-        view={currentView} 
-        onDashboardClick={handleBackToDashboard} 
-        project={selectedProject} 
+      <Header
+        view={currentView}
+        onDashboardClick={handleBackToDashboard}
+        project={selectedProject}
       />
-      
+
       <main className="flex-1 overflow-hidden">
         {currentView === 'dashboard' ? (
-          <Dashboard 
+          <Dashboard
             projects={projects}
-            onOpenProject={handleOpenProject} 
+            onOpenProject={handleOpenProject}
             onDeleteProject={(id) => setProjects(prev => prev.filter(p => p.id !== id))}
             onAddProject={(data) => {
-              const p: Project = { 
-                ...data, 
-                id: `PRJ-${Date.now()}`, 
-                lastModified: 'Just now', 
-                status: WorkflowStatus.DRAFT, 
-                progress: 0, 
-                assets: [] 
+              const p: Project = {
+                ...data,
+                id: `PRJ-${Date.now()}`,
+                lastModified: 'Just now',
+                status: WorkflowStatus.DRAFT,
+                progress: 0,
+                assets: []
               };
               setProjects(prev => [p, ...prev]);
             }}
           />
         ) : (
           selectedProject && (
-            <ProjectEditor 
-              project={selectedProject} 
+            <ProjectEditor
+              project={selectedProject}
               activeStage={currentStage}
               isProcessing={isTranslating}
               onStageChange={setCurrentStage}
