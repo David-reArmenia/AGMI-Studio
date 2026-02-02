@@ -62,12 +62,6 @@ const App: React.FC = () => {
     const project = projects.find(p => p.id === projectId);
     if (!project || !project.assets.length) return;
 
-    // Check for same language skip
-    if (project.targetLangs.length === 1 && project.sourceLang === project.targetLangs[0]) {
-      setCurrentStage(Stage.AUDIO_PRODUCTION);
-      return;
-    }
-
     setIsTranslating(true);
     setCurrentStage(Stage.TRANSLATION);
 
@@ -80,10 +74,18 @@ const App: React.FC = () => {
       const newTranslations: Record<string, TranslationData> = { ...project.translations };
 
       for (const lang of project.targetLangs) {
-        if (lang === project.sourceLang) continue;
+        // Same language as source - just copy the content (no translation needed)
+        if (lang === project.sourceLang) {
+          newTranslations[lang] = {
+            content: sourceText,
+            terms: sourceTerms.map(t => ({ ...t, id: `${t.id}-${lang}` })),
+            status: 'COMPLETED'
+          };
+          continue;
+        }
 
         const response = await ai.models.generateContent({
-          model: 'gemini-3-flash-preview',
+          model: 'gemini-2.0-flash',
           contents: `Translate this museum script from ${project.sourceLang} to ${lang}. 
           Also translate the provided glossary terms while maintaining their types and generating new IPA transcriptions for the target language.
           Return a JSON object with 'translatedContent' (string) and 'translatedTerms' (array of term objects).
@@ -143,7 +145,7 @@ const App: React.FC = () => {
     setSelectedProjectId(null);
   };
 
-  const handleAddProject = async (data: Partial<Project>) => {
+  const handleAddProject = async (data: Partial<Project>): Promise<Project | undefined> => {
     const p: Project = {
       ...data as any,
       id: `PRJ-${Date.now()}`,
@@ -159,8 +161,10 @@ const App: React.FC = () => {
     // Persist to API
     try {
       await createProject(p);
+      return p;
     } catch (err) {
       console.error('Failed to create project:', err);
+      return undefined;
     }
   };
 
@@ -228,6 +232,9 @@ const App: React.FC = () => {
               onStageChange={setCurrentStage}
               onAddAsset={(asset) => handleUpdateProject(selectedProject.id, { assets: [asset, ...selectedProject.assets] })}
               onRemoveAsset={(id) => handleUpdateProject(selectedProject.id, { assets: selectedProject.assets.filter(a => a.id !== id) })}
+              onUpdateAssetContent={(assetId, content) => handleUpdateProject(selectedProject.id, {
+                assets: selectedProject.assets.map(a => a.id === assetId ? { ...a, content } : a)
+              })}
               onUpdateTerms={(terms) => handleUpdateProject(selectedProject.id, { terms })}
               onUpdateTranslations={(translations) => handleUpdateProject(selectedProject.id, { translations })}
               onUpdateAudioOutputs={(audioOutputs) => handleUpdateProject(selectedProject.id, { audioOutputs })}

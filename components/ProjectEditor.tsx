@@ -12,6 +12,7 @@ interface ProjectEditorProps {
   onStageChange: (stage: Stage) => void;
   onAddAsset: (asset: SourceAsset) => void;
   onRemoveAsset: (assetId: string) => void;
+  onUpdateAssetContent: (assetId: string, content: string) => void;
   onUpdateTerms: (terms: Term[]) => void;
   onUpdateTranslations: (translations: Record<string, TranslationData>) => void;
   onUpdateAudioOutputs: (outputs: AudioOutput[]) => void;
@@ -25,6 +26,7 @@ const ProjectEditor: React.FC<ProjectEditorProps> = ({
   onStageChange,
   onAddAsset,
   onRemoveAsset,
+  onUpdateAssetContent,
   onUpdateTerms,
   onUpdateTranslations,
   onUpdateAudioOutputs,
@@ -109,10 +111,9 @@ const ProjectEditor: React.FC<ProjectEditorProps> = ({
         {activeStage === Stage.SOURCE_MATERIALS && (
           <SourceStage
             assets={project.assets}
-            existingTerms={project.terms}
             onAddAsset={onAddAsset}
             onRemoveAsset={onRemoveAsset}
-            onUpdateTerms={onUpdateTerms}
+            onUpdateAssetContent={onUpdateAssetContent}
             onSubmit={onSubmitToTranslation}
           />
         )}
@@ -120,6 +121,7 @@ const ProjectEditor: React.FC<ProjectEditorProps> = ({
           <TranslationStage
             project={project}
             onUpdateTranslations={onUpdateTranslations}
+            onUpdateTerms={onUpdateTerms}
             onProceed={() => onStageChange(Stage.AUDIO_PRODUCTION)}
           />
         )}
@@ -130,3 +132,4 @@ const ProjectEditor: React.FC<ProjectEditorProps> = ({
 };
 
 export default ProjectEditor;
+

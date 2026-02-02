@@ -6,7 +6,7 @@ interface DashboardProps {
   projects: Project[];
   onOpenProject: (project: Project) => void;
   onDeleteProject: (projectId: string) => void;
-  onAddProject: (project: Omit<Project, 'id' | 'lastModified' | 'status' | 'progress'>) => void;
+  onAddProject: (project: Omit<Project, 'id' | 'lastModified' | 'status' | 'progress'>) => Promise<Project | undefined>;
 }
 
 const Dashboard: React.FC<DashboardProps> = ({ projects, onOpenProject, onDeleteProject, onAddProject }) => {
@@ -16,18 +16,28 @@ const Dashboard: React.FC<DashboardProps> = ({ projects, onOpenProject, onDelete
 
   // Form State
   const [newName, setNewName] = useState('');
-  const [newSourceLang, setNewSourceLang] = useState('HY');
+  const [newSourceLang, setNewSourceLang] = useState('AUTO');
   const [newTargetLangs, setNewTargetLangs] = useState<string[]>([]);
 
   const availableLangs = [
-    { code: 'EN', name: 'English' },
-    { code: 'FR', name: 'French' },
+    { code: 'EN-US', name: 'English (US)' },
+    { code: 'EN-GB', name: 'English (GB)' },
+    { code: 'HY', name: 'Armenian' },
     { code: 'RU', name: 'Russian' },
+    { code: 'FR', name: 'French' },
     { code: 'DE', name: 'German' },
-    { code: 'ES', name: 'Spanish' },
+    { code: 'ES', name: 'Spanish (Int)' },
+    { code: 'ES-LA', name: 'Spanish (LatAm)' },
     { code: 'IT', name: 'Italian' },
     { code: 'TR', name: 'Turkish' },
-    { code: 'AR', name: 'Arabic' }
+    { code: 'AR', name: 'Arabic' },
+    { code: 'ZH', name: 'Chinese' },
+    { code: 'JA', name: 'Japanese' }
+  ];
+
+  const sourceLangOptions = [
+    { code: 'AUTO', name: '🔍 Auto-Detect' },
+    ...availableLangs
   ];
 
   const getStatusColor = (status: WorkflowStatus) => {
@@ -98,21 +108,25 @@ const Dashboard: React.FC<DashboardProps> = ({ projects, onOpenProject, onDelete
     }
   };
 
-  const handleCreateProject = (e: React.FormEvent) => {
+  const handleCreateProject = async (e: React.FormEvent) => {
     e.preventDefault();
     if (!newName.trim()) return;
-    onAddProject({
+    const newProject = await onAddProject({
       name: newName,
       sourceLang: newSourceLang,
-      targetLangs: newTargetLangs.length > 0 ? newTargetLangs : ['EN']
+      targetLangs: newTargetLangs.length > 0 ? newTargetLangs : ['EN-US']
     });
     setShowCreateModal(false);
     resetForm();
+    // Immediately open the new project
+    if (newProject) {
+      onOpenProject(newProject);
+    }
   };
 
   const resetForm = () => {
     setNewName('');
-    setNewSourceLang('HY');
+    setNewSourceLang('AUTO');
     setNewTargetLangs([]);
   };
 
@@ -224,7 +238,7 @@ const Dashboard: React.FC<DashboardProps> = ({ projects, onOpenProject, onDelete
               <div className="size-12 rounded bg-primary/10 flex items-center justify-center text-primary mb-6 border border-primary/20">
                 <span className="material-symbols-outlined text-2xl">folder_zip</span>
               </div>
-              <h3 className="text-xl font-bold text-white mb-1 uppercase tracking-tight">Initialize New Project</h3>
+              <h3 className="text-xl font-bold text-white mb-1 uppercase tracking-tight">Create New Project</h3>
               <p className="text-[#93adc8] text-[11px] font-medium uppercase tracking-widest">Localization & Production Suite</p>
             </div>
 
@@ -241,7 +255,7 @@ const Dashboard: React.FC<DashboardProps> = ({ projects, onOpenProject, onDelete
                 />
               </div>
 
-              <div className="grid grid-cols-2 gap-4">
+              <div className="grid grid-cols-2 gap-6">
                 <div className="space-y-2">
                   <label className="text-[10px] font-black uppercase tracking-widest text-[#5a7187]">Source Language</label>
                   <select
@@ -249,34 +263,32 @@ const Dashboard: React.FC<DashboardProps> = ({ projects, onOpenProject, onDelete
                     onChange={(e) => setNewSourceLang(e.target.value)}
                     className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-sm focus:ring-2 focus:ring-primary focus:border-transparent transition-all outline-none text-white"
                   >
-                    <option value="HY">Armenian (HY)</option>
-                    <option value="EN">English (EN)</option>
+                    {sourceLangOptions.map(lang => (
+                      <option key={lang.code} value={lang.code}>{lang.name}</option>
+                    ))}
                   </select>
                 </div>
                 <div className="space-y-2">
-                  <label className="text-[10px] font-black uppercase tracking-widest text-[#5a7187]">Work Mode</label>
-                  <div className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-sm text-[#5a7187] italic">
-                    Standard Production
+                  <label className="text-[10px] font-black uppercase tracking-widest text-[#5a7187]">Target Languages</label>
+                  <div className="flex flex-col gap-1.5 max-h-[200px] overflow-y-auto custom-scrollbar">
+                    {availableLangs.map((lang) => (
+                      <button
+                        key={lang.code}
+                        type="button"
+                        onClick={() => toggleTargetLang(lang.code)}
+                        className={`py-2 px-3 rounded border text-[11px] font-bold text-left transition-all flex items-center gap-2 ${newTargetLangs.includes(lang.code)
+                          ? 'bg-primary border-primary text-white'
+                          : 'bg-background-dark border-border-dark text-[#5a7187] hover:border-[#93adc8]'
+                          }`}
+                      >
+                        <span className={`w-3 h-3 rounded border flex items-center justify-center text-[8px] ${newTargetLangs.includes(lang.code) ? 'border-white bg-white/20' : 'border-[#5a7187]'
+                          }`}>
+                          {newTargetLangs.includes(lang.code) && '✓'}
+                        </span>
+                        {lang.name}
+                      </button>
+                    ))}
                   </div>
-                </div>
-              </div>
-
-              <div className="space-y-3">
-                <label className="text-[10px] font-black uppercase tracking-widest text-[#5a7187]">Target Localization Languages</label>
-                <div className="grid grid-cols-4 gap-2">
-                  {availableLangs.map((lang) => (
-                    <button
-                      key={lang.code}
-                      type="button"
-                      onClick={() => toggleTargetLang(lang.code)}
-                      className={`py-2 px-1 rounded border text-[10px] font-black uppercase tracking-tighter transition-all ${newTargetLangs.includes(lang.code)
-                        ? 'bg-primary border-primary text-white'
-                        : 'bg-background-dark border-border-dark text-[#5a7187] hover:border-[#93adc8]'
-                        }`}
-                    >
-                      {lang.name}
-                    </button>
-                  ))}
                 </div>
               </div>
 
