@@ -113,6 +113,7 @@ const AudioStage: React.FC<AudioStageProps> = ({ project, onUpdateOutputs }) => 
   const [generationProgress, setGenerationProgress] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
   const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
+  const [playingOutputId, setPlayingOutputId] = useState<string | null>(null);
 
   // Refs for audio playback control
   const audioSourceRef = useRef<AudioBufferSourceNode | null>(null);
@@ -320,10 +321,18 @@ const AudioStage: React.FC<AudioStageProps> = ({ project, onUpdateOutputs }) => 
     if (!currentTranslation?.content || isGenerating) return;
 
     const outputId = `output-${Date.now()}`;
+    // Local timezone timestamp
+    const now = new Date();
+    const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}T${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}-${String(now.getSeconds()).padStart(2, '0')}`;
+    const projectName = project.name.replace(/\s+/g, '_');
+    const vendorName = settings.vendor.toUpperCase();
+    const settingsStr = `${vendorName},${settings.voiceId},e${(settings.emphasis * 100).toFixed(0)},s${(settings.solemnity * 100).toFixed(0)},p${(settings.pacing * 100).toFixed(0)}`;
+    const fileName = `${projectName}_(${settingsStr})_${timestamp}.${settings.format}`;
+
     const newOutput: AudioOutput = {
       id: outputId,
       language: activeLang,
-      fileName: `${project.name.replace(/\s+/g, '_')}_${activeLang}.${settings.format}`,
+      fileName,
       status: 'generating',
       progress: 0,
       createdAt: new Date().toISOString(),
@@ -433,13 +442,59 @@ const AudioStage: React.FC<AudioStageProps> = ({ project, onUpdateOutputs }) => 
 
   // Handle delete output
   const handleDeleteOutput = useCallback((outputId: string) => {
+    // Stop if this output is playing
+    if (playingOutputId === outputId) {
+      setPlayingOutputId(null);
+    }
     // Revoke blob URL to free memory
     const output = outputs.find(o => o.id === outputId);
     if (output?.audioUrl) {
       URL.revokeObjectURL(output.audioUrl);
     }
     setOutputs(prev => prev.filter(o => o.id !== outputId));
-  }, [outputs, setOutputs]);
+  }, [outputs, setOutputs, playingOutputId]);
+
+  // Ref to track current audio element for stopping
+  const currentAudioRef = useRef<HTMLAudioElement | null>(null);
+
+  // Handle play output from list
+  const handlePlayOutput = useCallback((output: AudioOutput) => {
+    if (!output.audioUrl) return;
+
+    if (playingOutputId === output.id) {
+      // Stop current playback immediately
+      if (currentAudioRef.current) {
+        currentAudioRef.current.pause();
+        currentAudioRef.current.currentTime = 0;
+        currentAudioRef.current = null;
+      }
+      setPlayingOutputId(null);
+      return;
+    }
+
+    // Stop any existing playback
+    if (currentAudioRef.current) {
+      currentAudioRef.current.pause();
+      currentAudioRef.current.currentTime = 0;
+    }
+
+    // Play the audio
+    setPlayingOutputId(output.id);
+    const audio = new Audio(output.audioUrl);
+    currentAudioRef.current = audio;
+    audio.onended = () => {
+      setPlayingOutputId(null);
+      currentAudioRef.current = null;
+    };
+    audio.onerror = () => {
+      setPlayingOutputId(null);
+      currentAudioRef.current = null;
+    };
+    audio.play().catch(() => {
+      setPlayingOutputId(null);
+      currentAudioRef.current = null;
+    });
+  }, [playingOutputId]);
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -739,13 +794,24 @@ const AudioStage: React.FC<AudioStageProps> = ({ project, onUpdateOutputs }) => 
                     </div>
                     <div className="flex items-center gap-1">
                       {output.status === 'completed' && output.audioUrl && (
-                        <button
-                          onClick={() => handleDownload(output)}
-                          className="p-2 hover:bg-primary/20 rounded text-primary"
-                          title="Download"
-                        >
-                          <span className="material-symbols-outlined text-[16px]">download</span>
-                        </button>
+                        <>
+                          <button
+                            onClick={() => handlePlayOutput(output)}
+                            className={`p-2 rounded ${playingOutputId === output.id ? 'bg-primary/30 text-primary' : 'hover:bg-primary/20 text-primary'}`}
+                            title={playingOutputId === output.id ? 'Stop' : 'Play'}
+                          >
+                            <span className="material-symbols-outlined text-[16px]">
+                              {playingOutputId === output.id ? 'stop' : 'play_arrow'}
+                            </span>
+                          </button>
+                          <button
+                            onClick={() => handleDownload(output)}
+                            className="p-2 hover:bg-primary/20 rounded text-primary"
+                            title="Download"
+                          >
+                            <span className="material-symbols-outlined text-[16px]">download</span>
+                          </button>
+                        </>
                       )}
                       {output.status === 'generating' && (
                         <span className="material-symbols-outlined text-primary animate-spin text-[16px]">refresh</span>
