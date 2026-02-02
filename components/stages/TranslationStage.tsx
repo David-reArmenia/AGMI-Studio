@@ -141,9 +141,14 @@ const TranslationStage: React.FC<TranslationStageProps> = ({ project, onUpdateTr
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-      const textToPronounce = term.text;
-      const ipaHint = term.ipa ? ` (pronunciation: ${term.ipa})` : '';
-      const prompt = `Say the word: "${textToPronounce}"${ipaHint}`;
+      // Prioritize IPA transcription if available - use it as the primary pronunciation guide
+      let prompt: string;
+      if (term.ipa && term.ipa.trim()) {
+        // When IPA is provided, instruct to follow the exact pronunciation
+        prompt = `Pronounce the word "${term.text}" exactly following this IPA transcription: ${term.ipa}. Say only the word, nothing else.`;
+      } else {
+        prompt = `Say the word: "${term.text}"`;
+      }
 
       const response = await ai.models.generateContent({
         model: "gemini-2.5-flash-preview-tts",

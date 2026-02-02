@@ -21,8 +21,13 @@ const SourceStage: React.FC<SourceStageProps> = ({ assets, onAddAsset, onRemoveA
   const [isAiProcessing, setIsAiProcessing] = useState(false);
   const [aiAction, setAiAction] = useState<string | null>(null);
   const [editableContent, setEditableContent] = useState('');
+  const [selectionInfo, setSelectionInfo] = useState<{ start: number, end: number } | null>(null);
+  const [contentHistory, setContentHistory] = useState<string[]>([]);
 
   const fileInputRef = useRef<HTMLInputElement>(null);
+  const textareaRef = useRef<HTMLTextAreaElement>(null);
+
+  const MAX_HISTORY = 10;
 
   const selectedAsset = assets.find(a => a.id === selectedAssetId);
 
@@ -128,6 +133,31 @@ const SourceStage: React.FC<SourceStageProps> = ({ assets, onAddAsset, onRemoveA
   const handleAiAction = async (action: string) => {
     if (!editableContent.trim() || isAiProcessing) return;
 
+    // Get current selection from textarea
+    const textarea = textareaRef.current;
+    let start = 0;
+    let end = editableContent.length;
+    let hasSelection = false;
+
+    if (textarea) {
+      const selStart = textarea.selectionStart;
+      const selEnd = textarea.selectionEnd;
+      // Only use selection if something is actually selected (not just cursor position)
+      if (selStart !== selEnd) {
+        start = selStart;
+        end = selEnd;
+        hasSelection = true;
+      }
+    }
+
+    const textToProcess = hasSelection ? editableContent.substring(start, end) : editableContent;
+
+    // Save current state to history before making changes
+    setContentHistory(prev => {
+      const newHistory = [...prev, editableContent];
+      return newHistory.slice(-MAX_HISTORY); // Keep only last MAX_HISTORY entries
+    });
+
     setIsAiProcessing(true);
     setAiAction(action);
 
@@ -135,12 +165,12 @@ const SourceStage: React.FC<SourceStageProps> = ({ assets, onAddAsset, onRemoveA
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
       const prompts: Record<string, string> = {
-        summarize: `Summarize this text concisely while preserving key information:\n\n${editableContent}`,
-        rewrite: `Rewrite this text to be clearer and more engaging while preserving the meaning:\n\n${editableContent}`,
-        simplify: `Simplify this text to be more accessible and easier to understand. Use simpler words and shorter sentences:\n\n${editableContent}`,
-        merge: `Merge similar paragraphs and consolidate repeated ideas in this text:\n\n${editableContent}`,
-        dedupe: `Remove duplicate or redundant information from this text while keeping the content complete:\n\n${editableContent}`,
-        normalize: `Normalize the writing style of this text to be consistent in tone, tense, and formatting:\n\n${editableContent}`
+        summarize: `Summarize this text concisely while preserving key information:\n\n${textToProcess}`,
+        rewrite: `Rewrite this text to be clearer and more engaging while preserving the meaning:\n\n${textToProcess}`,
+        simplify: `Simplify this text to be more accessible and easier to understand. Use simpler words and shorter sentences:\n\n${textToProcess}`,
+        merge: `Merge similar paragraphs and consolidate repeated ideas in this text:\n\n${textToProcess}`,
+        dedupe: `Remove duplicate or redundant information from this text while keeping the content complete:\n\n${textToProcess}`,
+        normalize: `Normalize the writing style of this text to be consistent in tone, tense, and formatting:\n\n${textToProcess}`
       };
 
       const response = await ai.models.generateContent({
@@ -150,13 +180,30 @@ const SourceStage: React.FC<SourceStageProps> = ({ assets, onAddAsset, onRemoveA
 
       const result = response.text || '';
       if (result) {
-        handleContentChange(result);
+        if (hasSelection) {
+          // Replace only the selected portion
+          const newContent = editableContent.substring(0, start) + result + editableContent.substring(end);
+          handleContentChange(newContent);
+        } else {
+          // Replace entire content
+          handleContentChange(result);
+        }
       }
     } catch (err) {
       console.error('AI Action error:', err);
     } finally {
       setIsAiProcessing(false);
       setAiAction(null);
+    }
+  };
+
+  const handleUndo = () => {
+    if (contentHistory.length === 0) return;
+    const previousContent = contentHistory[contentHistory.length - 1];
+    setContentHistory(prev => prev.slice(0, -1));
+    setEditableContent(previousContent);
+    if (selectedAssetId) {
+      onUpdateAssetContent(selectedAssetId, previousContent);
     }
   };
 
@@ -237,6 +284,7 @@ const SourceStage: React.FC<SourceStageProps> = ({ assets, onAddAsset, onRemoveA
           {selectedAsset ? (
             <div className="max-w-[720px] w-full">
               <textarea
+                ref={textareaRef}
                 className="w-full h-full min-h-[600px] bg-[#111820] p-16 shadow-2xl border border-border-dark/20 font-serif leading-relaxed text-[#b0bac5] resize-none outline-none focus:ring-1 focus:ring-primary/30"
                 value={editableContent}
                 onChange={(e) => handleContentChange(e.target.value)}
@@ -277,6 +325,15 @@ const SourceStage: React.FC<SourceStageProps> = ({ assets, onAddAsset, onRemoveA
               <span className="material-symbols-outlined text-violet-400 animate-spin">progress_activity</span>
               <span className="text-[10px] text-violet-300 font-bold uppercase tracking-wide">Processing {aiAction}...</span>
             </div>
+          )}
+          {contentHistory.length > 0 && !isAiProcessing && (
+            <button
+              onClick={handleUndo}
+              className="w-full mt-2 px-4 py-2 bg-amber-500/10 border border-amber-500/30 rounded-lg flex items-center justify-center gap-2 text-amber-400 hover:bg-amber-500/20 transition-all"
+            >
+              <span className="material-symbols-outlined text-sm">undo</span>
+              <span className="text-[10px] font-bold uppercase tracking-wide">Undo ({contentHistory.length})</span>
+            </button>
           )}
         </div>
 
