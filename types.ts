@@ -39,6 +39,7 @@ export interface Project {
   assets: SourceAsset[];
   terms?: Term[];
   translations?: Record<string, TranslationData>; // Lang code -> Data
+  audioOutputs?: AudioOutput[]; // Persisted audio generation results
 }
 
 export type TermCategory = 'toponym' | 'figure' | 'ethnonym' | 'historical_term' | 'date';

@@ -1,11 +1,11 @@
 
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { Project, Stage, WorkflowStatus, SourceAsset, Term, TranslationData } from './types';
 import Dashboard from './components/Dashboard';
 import ProjectEditor from './components/ProjectEditor';
 import Header from './components/Header';
 import Footer from './components/Footer';
-// MOCK_PROJECTS available in constants.tsx if needed for testing
+import { fetchProjects, createProject, updateProject as apiUpdateProject, deleteProject as apiDeleteProject } from './utils/api';
 import { GoogleGenAI, Type } from "@google/genai";
 
 const App: React.FC = () => {
@@ -14,8 +14,28 @@ const App: React.FC = () => {
   const [selectedProjectId, setSelectedProjectId] = useState<string | null>(null);
   const [currentStage, setCurrentStage] = useState<Stage>(Stage.SOURCE_MATERIALS);
   const [isTranslating, setIsTranslating] = useState(false);
+  const [isLoading, setIsLoading] = useState(true);
+  const [apiError, setApiError] = useState<string | null>(null);
 
   const selectedProject = projects.find(p => p.id === selectedProjectId) || null;
+
+  // Load projects from API on mount
+  useEffect(() => {
+    const loadProjects = async () => {
+      try {
+        setIsLoading(true);
+        setApiError(null);
+        const data = await fetchProjects();
+        setProjects(data);
+      } catch (err) {
+        console.error('Failed to load projects:', err);
+        setApiError('Failed to connect to server. Make sure the backend is running on port 3001.');
+      } finally {
+        setIsLoading(false);
+      }
+    };
+    loadProjects();
+  }, []);
 
   const handleOpenProject = (project: Project) => {
     setSelectedProjectId(project.id);
@@ -23,8 +43,19 @@ const App: React.FC = () => {
     setCurrentStage(Stage.SOURCE_MATERIALS);
   };
 
-  const handleUpdateProject = (projectId: string, updates: Partial<Project>) => {
+  const handleUpdateProject = async (projectId: string, updates: Partial<Project>) => {
+    // Update local state immediately for responsiveness
     setProjects(prev => prev.map(p => p.id === projectId ? { ...p, ...updates } : p));
+
+    // Persist to API
+    try {
+      const project = projects.find(p => p.id === projectId);
+      if (project) {
+        await apiUpdateProject(projectId, { ...project, ...updates });
+      }
+    } catch (err) {
+      console.error('Failed to save project:', err);
+    }
   };
 
   const handleTranslateProject = async (projectId: string) => {
@@ -112,6 +143,66 @@ const App: React.FC = () => {
     setSelectedProjectId(null);
   };
 
+  const handleAddProject = async (data: Partial<Project>) => {
+    const p: Project = {
+      ...data as any,
+      id: `PRJ-${Date.now()}`,
+      lastModified: new Date().toISOString(),
+      status: WorkflowStatus.DRAFT,
+      progress: 0,
+      assets: []
+    };
+
+    // Update local state
+    setProjects(prev => [p, ...prev]);
+
+    // Persist to API
+    try {
+      await createProject(p);
+    } catch (err) {
+      console.error('Failed to create project:', err);
+    }
+  };
+
+  const handleDeleteProject = async (id: string) => {
+    // Update local state
+    setProjects(prev => prev.filter(p => p.id !== id));
+
+    // Persist to API
+    try {
+      await apiDeleteProject(id);
+    } catch (err) {
+      console.error('Failed to delete project:', err);
+    }
+  };
+
+  // Show loading state
+  if (isLoading) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center bg-background-dark text-[#e1e1e1]">
+        <div className="w-12 h-12 border-4 border-primary border-t-transparent rounded-full animate-spin mb-4"></div>
+        <p className="text-sm uppercase tracking-widest">Loading Projects...</p>
+      </div>
+    );
+  }
+
+  // Show error state
+  if (apiError) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center bg-background-dark text-[#e1e1e1]">
+        <span className="material-symbols-outlined text-6xl text-red-500 mb-4">error</span>
+        <p className="text-lg font-bold mb-2">Connection Error</p>
+        <p className="text-sm text-[#5a7187] text-center max-w-md">{apiError}</p>
+        <button
+          onClick={() => window.location.reload()}
+          className="mt-6 px-6 py-2 bg-primary text-white rounded font-bold text-sm uppercase"
+        >
+          Retry
+        </button>
+      </div>
+    );
+  }
+
   return (
     <div className="h-screen flex flex-col bg-background-dark text-[#e1e1e1]">
       <Header
@@ -125,18 +216,8 @@ const App: React.FC = () => {
           <Dashboard
             projects={projects}
             onOpenProject={handleOpenProject}
-            onDeleteProject={(id) => setProjects(prev => prev.filter(p => p.id !== id))}
-            onAddProject={(data) => {
-              const p: Project = {
-                ...data,
-                id: `PRJ-${Date.now()}`,
-                lastModified: 'Just now',
-                status: WorkflowStatus.DRAFT,
-                progress: 0,
-                assets: []
-              };
-              setProjects(prev => [p, ...prev]);
-            }}
+            onDeleteProject={handleDeleteProject}
+            onAddProject={handleAddProject}
           />
         ) : (
           selectedProject && (
@@ -149,6 +230,7 @@ const App: React.FC = () => {
               onRemoveAsset={(id) => handleUpdateProject(selectedProject.id, { assets: selectedProject.assets.filter(a => a.id !== id) })}
               onUpdateTerms={(terms) => handleUpdateProject(selectedProject.id, { terms })}
               onUpdateTranslations={(translations) => handleUpdateProject(selectedProject.id, { translations })}
+              onUpdateAudioOutputs={(audioOutputs) => handleUpdateProject(selectedProject.id, { audioOutputs })}
               onSubmitToTranslation={() => handleTranslateProject(selectedProject.id)}
             />
           )

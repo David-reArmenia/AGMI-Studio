@@ -8,6 +8,7 @@ export const TTS_VENDORS = [
         description: 'High-quality TTS using Google Gemini AI',
         envKey: 'GEMINI_API_KEY',
         supportsSSML: true,
+        supportsStreaming: true,
         supportedFormats: ['mp3', 'wav'] as const,
     },
     {
@@ -16,6 +17,7 @@ export const TTS_VENDORS = [
         description: 'Premium AI voice synthesis',
         envKey: 'ELEVENLABS_API_KEY',
         supportsSSML: false,
+        supportsStreaming: true,
         supportedFormats: ['mp3', 'wav', 'ogg'] as const,
     },
     {
@@ -24,6 +26,7 @@ export const TTS_VENDORS = [
         description: 'OpenAI TTS voices',
         envKey: 'OPENAI_API_KEY',
         supportsSSML: false,
+        supportsStreaming: false,
         supportedFormats: ['mp3', 'wav', 'ogg'] as const,
     },
 ];

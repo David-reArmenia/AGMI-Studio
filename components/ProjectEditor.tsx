@@ -1,5 +1,5 @@
 import React from 'react';
-import { Project, Stage, SourceAsset, Term, TranslationData } from '../types';
+import { Project, Stage, SourceAsset, Term, TranslationData, AudioOutput } from '../types';
 import SourceStage from './stages/SourceStage';
 import TranslationStage from './stages/TranslationStage';
 import AudioStage from './stages/AudioStage';
@@ -14,6 +14,7 @@ interface ProjectEditorProps {
   onRemoveAsset: (assetId: string) => void;
   onUpdateTerms: (terms: Term[]) => void;
   onUpdateTranslations: (translations: Record<string, TranslationData>) => void;
+  onUpdateAudioOutputs: (outputs: AudioOutput[]) => void;
   onSubmitToTranslation: () => void;
 }
 
@@ -26,6 +27,7 @@ const ProjectEditor: React.FC<ProjectEditorProps> = ({
   onRemoveAsset,
   onUpdateTerms,
   onUpdateTranslations,
+  onUpdateAudioOutputs,
   onSubmitToTranslation
 }) => {
 
@@ -121,7 +123,7 @@ const ProjectEditor: React.FC<ProjectEditorProps> = ({
             onProceed={() => onStageChange(Stage.AUDIO_PRODUCTION)}
           />
         )}
-        {activeStage === Stage.AUDIO_PRODUCTION && <AudioStage project={project} />}
+        {activeStage === Stage.AUDIO_PRODUCTION && <AudioStage project={project} onUpdateOutputs={onUpdateAudioOutputs} />}
       </div>
     </div>
   );

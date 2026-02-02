@@ -3,10 +3,12 @@ import { Project, TTSVendor, TTSSettings, VoiceProfile, AudioOutput, Term } from
 import { TTS_VENDORS, VOICE_PROFILES, getVoicesForVendor, getVendorConfig } from '../../constants/tts';
 import { generateSSMLPreview, getSSMLWarnings, vendorSupportsSSML } from '../../utils/ssml';
 import { GoogleGenAI, Modality } from "@google/genai";
+import { convertAudio } from '../../utils/api';
 import LoadingOverlay from '../LoadingOverlay';
 
 interface AudioStageProps {
   project: Project;
+  onUpdateOutputs: (outputs: AudioOutput[]) => void;
 }
 
 // Helper to decode base64 audio
@@ -20,7 +22,6 @@ function decodeBase64(base64: string): Uint8Array {
   return bytes;
 }
 
-// Helper to decode raw audio data
 async function decodeAudioData(
   data: Uint8Array,
   ctx: AudioContext,
@@ -40,7 +41,51 @@ async function decodeAudioData(
   return buffer;
 }
 
-const AudioStage: React.FC<AudioStageProps> = ({ project }) => {
+// Helper to create WAV file with proper headers from raw PCM data
+function createWavFile(pcmData: Uint8Array, sampleRate: number, numChannels: number): ArrayBuffer {
+  const bitsPerSample = 16;
+  const byteRate = sampleRate * numChannels * (bitsPerSample / 8);
+  const blockAlign = numChannels * (bitsPerSample / 8);
+  const dataLength = pcmData.length;
+  const headerLength = 44;
+  const totalLength = headerLength + dataLength;
+
+  const buffer = new ArrayBuffer(totalLength);
+  const view = new DataView(buffer);
+
+  // RIFF chunk descriptor
+  writeString(view, 0, 'RIFF');
+  view.setUint32(4, totalLength - 8, true); // File size minus RIFF header
+  writeString(view, 8, 'WAVE');
+
+  // fmt sub-chunk
+  writeString(view, 12, 'fmt ');
+  view.setUint32(16, 16, true); // Subchunk1 size (16 for PCM)
+  view.setUint16(20, 1, true); // Audio format (1 = PCM)
+  view.setUint16(22, numChannels, true);
+  view.setUint32(24, sampleRate, true);
+  view.setUint32(28, byteRate, true);
+  view.setUint16(32, blockAlign, true);
+  view.setUint16(34, bitsPerSample, true);
+
+  // data sub-chunk
+  writeString(view, 36, 'data');
+  view.setUint32(40, dataLength, true);
+
+  // Write PCM data
+  const pcmView = new Uint8Array(buffer, headerLength);
+  pcmView.set(pcmData);
+
+  return buffer;
+}
+
+function writeString(view: DataView, offset: number, str: string): void {
+  for (let i = 0; i < str.length; i++) {
+    view.setUint8(offset + i, str.charCodeAt(i));
+  }
+}
+
+const AudioStage: React.FC<AudioStageProps> = ({ project, onUpdateOutputs }) => {
   // Language state
   const [activeLang, setActiveLang] = useState(project.targetLangs[0] || 'EN');
 
@@ -54,15 +99,25 @@ const AudioStage: React.FC<AudioStageProps> = ({ project }) => {
     format: 'mp3',
   });
 
-  // Audio output state
-  const [outputs, setOutputs] = useState<AudioOutput[]>([]);
+  // Audio output state - use project's persisted outputs
+  const outputs = project.audioOutputs || [];
+  const outputsRef = useRef(outputs);
+  outputsRef.current = outputs; // Keep ref in sync
+
+  const setOutputs = useCallback((updater: AudioOutput[] | ((prev: AudioOutput[]) => AudioOutput[])) => {
+    const currentOutputs = outputsRef.current;
+    const newOutputs = typeof updater === 'function' ? updater(currentOutputs) : updater;
+    onUpdateOutputs(newOutputs);
+  }, [onUpdateOutputs]);
   const [isGenerating, setIsGenerating] = useState(false);
   const [generationProgress, setGenerationProgress] = useState(0);
   const [isPlaying, setIsPlaying] = useState(false);
+  const [isGeneratingPreview, setIsGeneratingPreview] = useState(false);
 
   // Refs for audio playback control
   const audioSourceRef = useRef<AudioBufferSourceNode | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
+  const generatingTimeoutRef = useRef<NodeJS.Timeout | null>(null);
 
   // Get current translation
   const currentTranslation = project.translations?.[activeLang];
@@ -133,25 +188,41 @@ const AudioStage: React.FC<AudioStageProps> = ({ project }) => {
     if (!currentTranslation?.content) return;
 
     setIsPlaying(true);
+
+    // Show "Generating..." after 1 second if still loading
+    generatingTimeoutRef.current = setTimeout(() => {
+      setIsGeneratingPreview(true);
+    }, 1000);
+
     try {
+      console.log('[TTS Preview] === DEBUG START ===');
+      console.log('[TTS Preview] API Key present:', !!process.env.API_KEY);
+      console.log('[TTS Preview] Voice:', settings.voiceId);
+
+      // Check if vendor supports streaming
+      const vendorConfig = getVendorConfig(settings.vendor);
+      const useStreaming = vendorConfig?.supportsStreaming ?? false;
+      console.log('[TTS Preview] Streaming supported:', useStreaming);
+
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
-      // Prepare content with pronunciation hints
-      const previewText = currentTranslation.content.substring(0, 500);
+      // Use shorter text for preview to reduce latency
+      const previewText = currentTranslation.content.substring(0, 300);
       let prompt = previewText;
 
       // Add pronunciation guidance for terms
       const termsWithIPA = currentTerms.filter(t => t.ipa);
       if (termsWithIPA.length > 0) {
         const pronunciationGuide = termsWithIPA
+          .slice(0, 5) // Limit to 5 terms for faster generation
           .map(t => `"${t.text}" should be pronounced as "${t.ipa}"`)
           .join(', ');
         prompt = `${previewText}\n\n[Pronunciation guide: ${pronunciationGuide}]`;
       }
 
-      console.log('[TTS Preview] Generating with voice:', settings.voiceId);
+      console.log('[TTS Preview] Prompt length:', prompt.length);
 
-      const response = await ai.models.generateContent({
+      const requestConfig = {
         model: "gemini-2.5-flash-preview-tts",
         contents: [{ parts: [{ text: prompt }] }],
         config: {
@@ -162,19 +233,58 @@ const AudioStage: React.FC<AudioStageProps> = ({ project }) => {
             }
           }
         },
-      });
+      };
 
-      const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      let base64Audio: string | undefined;
+
+      if (useStreaming) {
+        // Use streaming API for faster time-to-first-audio
+        console.log('[TTS Preview] Using streaming API...');
+        const stream = await ai.models.generateContentStream(requestConfig);
+
+        // Collect audio chunks
+        const audioChunks: string[] = [];
+        for await (const chunk of stream) {
+          const chunkAudio = chunk.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+          if (chunkAudio) {
+            audioChunks.push(chunkAudio);
+            console.log('[TTS Preview] Received chunk, total chunks:', audioChunks.length);
+          }
+        }
+
+        // Combine all chunks (for TTS, usually comes as one chunk but streaming reduces TTFB)
+        base64Audio = audioChunks.join('');
+        console.log('[TTS Preview] Streaming complete, total audio length:', base64Audio?.length);
+      } else {
+        // Use regular API for non-streaming vendors
+        console.log('[TTS Preview] Using regular API...');
+        const response = await ai.models.generateContent(requestConfig);
+        base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
+      }
+
+      console.log('[TTS Preview] Audio data received:', !!base64Audio, 'Length:', base64Audio?.length);
+
       if (base64Audio) {
+        // Clear generating state immediately when audio is ready
+        if (generatingTimeoutRef.current) {
+          clearTimeout(generatingTimeoutRef.current);
+          generatingTimeoutRef.current = null;
+        }
+        setIsGeneratingPreview(false);
+
+        console.log('[TTS Preview] Creating AudioContext...');
         const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
         audioContextRef.current = audioCtx;
+        console.log('[TTS Preview] Decoding audio...');
         const audioBuffer = await decodeAudioData(decodeBase64(base64Audio), audioCtx, 24000, 1);
+        console.log('[TTS Preview] Audio buffer created, duration:', audioBuffer.duration);
         const source = audioCtx.createBufferSource();
         audioSourceRef.current = source;
         source.buffer = audioBuffer;
         source.playbackRate.value = settings.pacing;
         source.connect(audioCtx.destination);
         source.onended = () => {
+          console.log('[TTS Preview] Playback ended');
           setIsPlaying(false);
           audioSourceRef.current = null;
           if (audioContextRef.current) {
@@ -182,14 +292,26 @@ const AudioStage: React.FC<AudioStageProps> = ({ project }) => {
             audioContextRef.current = null;
           }
         };
+        console.log('[TTS Preview] Starting playback...');
         source.start();
+        console.log('[TTS Preview] === DEBUG END (Success) ===');
       } else {
         console.warn('[TTS Preview] No audio data received');
         setIsPlaying(false);
       }
-    } catch (error) {
-      console.error('[TTS Preview] Error:', error);
+    } catch (error: any) {
+      console.error('[TTS Preview] === ERROR ===');
+      console.error('[TTS Preview] Error name:', error?.name);
+      console.error('[TTS Preview] Error message:', error?.message);
+      console.error('[TTS Preview] Full error:', error);
       setIsPlaying(false);
+    } finally {
+      // Clear the generating timeout and state
+      if (generatingTimeoutRef.current) {
+        clearTimeout(generatingTimeoutRef.current);
+        generatingTimeoutRef.current = null;
+      }
+      setIsGeneratingPreview(false);
     }
   }, [isPlaying, currentTranslation, currentTerms, settings, stopAudio]);
 
@@ -201,7 +323,7 @@ const AudioStage: React.FC<AudioStageProps> = ({ project }) => {
     const newOutput: AudioOutput = {
       id: outputId,
       language: activeLang,
-      fileName: `${project.name.replace(/\s+/g, '_')}_${activeLang}.mp3`,
+      fileName: `${project.name.replace(/\s+/g, '_')}_${activeLang}.${settings.format}`,
       status: 'generating',
       progress: 0,
       createdAt: new Date().toISOString(),
@@ -251,9 +373,30 @@ const AudioStage: React.FC<AudioStageProps> = ({ project }) => {
 
       const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
       if (base64Audio) {
-        // Create blob URL for download
+        // Create audio file with proper format
         const audioBytes = decodeBase64(base64Audio);
-        const blob = new Blob([new Uint8Array(audioBytes).buffer as ArrayBuffer], { type: 'audio/wav' });
+
+        let blob: Blob;
+
+        if (settings.format === 'wav') {
+          // WAV: Handle locally with proper headers
+          const wavBuffer = createWavFile(audioBytes, 24000, 1);
+          blob = new Blob([wavBuffer], { type: 'audio/wav' });
+          console.log('[TTS Generate] Created WAV file locally');
+        } else {
+          // MP3/OGG: Use server-side ffmpeg conversion
+          console.log(`[TTS Generate] Converting to ${settings.format} via server...`);
+          try {
+            blob = await convertAudio(audioBytes, settings.format as 'mp3' | 'ogg', 24000, 1);
+            console.log(`[TTS Generate] Server conversion to ${settings.format} complete`);
+          } catch (conversionError) {
+            console.warn('[TTS Generate] Server conversion failed, falling back to WAV:', conversionError);
+            // Fallback to WAV if conversion fails
+            const wavBuffer = createWavFile(audioBytes, 24000, 1);
+            blob = new Blob([wavBuffer], { type: 'audio/wav' });
+          }
+        }
+
         const audioUrl = URL.createObjectURL(blob);
 
         setOutputs(prev => prev.map(o =>
@@ -262,7 +405,7 @@ const AudioStage: React.FC<AudioStageProps> = ({ project }) => {
             : o
         ));
         setGenerationProgress(100);
-        console.log('[TTS Generate] Completed successfully');
+        console.log('[TTS Generate] Completed successfully, audio size:', blob.size);
       } else {
         throw new Error('No audio data received');
       }
@@ -287,6 +430,16 @@ const AudioStage: React.FC<AudioStageProps> = ({ project }) => {
     a.download = output.fileName;
     a.click();
   }, []);
+
+  // Handle delete output
+  const handleDeleteOutput = useCallback((outputId: string) => {
+    // Revoke blob URL to free memory
+    const output = outputs.find(o => o.id === outputId);
+    if (output?.audioUrl) {
+      URL.revokeObjectURL(output.audioUrl);
+    }
+    setOutputs(prev => prev.filter(o => o.id !== outputId));
+  }, [outputs, setOutputs]);
 
   return (
     <div className="h-full flex flex-col overflow-hidden">
@@ -461,21 +614,34 @@ const AudioStage: React.FC<AudioStageProps> = ({ project }) => {
                 {Array.from({ length: 24 }).map((_, i) => (
                   <div
                     key={i}
-                    className={`w-2 rounded-full transition-all ${isPlaying ? 'bg-primary animate-pulse' : 'bg-primary/20'}`}
-                    style={{ height: `${Math.random() * 100}%` }}
+                    className={`w-2 rounded-full transition-all ${isPlaying && !isGeneratingPreview
+                      ? 'bg-primary animate-pulse'
+                      : isGeneratingPreview
+                        ? 'bg-yellow-500/50 animate-pulse'
+                        : 'bg-primary/20'
+                      }`}
+                    style={{ height: isGeneratingPreview ? '30%' : `${Math.random() * 100}%` }}
                   />
                 ))}
               </div>
               <button
                 onClick={handlePreview}
                 disabled={!currentTranslation?.content}
-                className={`flex items-center gap-3 px-10 py-3 font-black uppercase tracking-widest rounded text-[11px] shadow-2xl transition-all ${isPlaying
+                className={`flex items-center gap-3 px-10 py-3 font-black uppercase tracking-widest rounded text-[11px] shadow-2xl transition-all ${isPlaying && !isGeneratingPreview
                   ? 'bg-red-600 text-white hover:bg-red-700'
-                  : 'bg-white text-black hover:-translate-y-0.5'
+                  : isGeneratingPreview
+                    ? 'bg-yellow-500 text-black cursor-wait'
+                    : 'bg-white text-black hover:-translate-y-0.5'
                   } ${!currentTranslation?.content ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
-                <span className="material-symbols-outlined">{isPlaying ? 'stop_circle' : 'play_circle'}</span>
-                {isPlaying ? 'Stop Preview' : `Preview ${activeLang} Audio`}
+                <span className="material-symbols-outlined">
+                  {isGeneratingPreview ? 'hourglass_top' : isPlaying ? 'stop_circle' : 'play_circle'}
+                </span>
+                {isGeneratingPreview
+                  ? 'Generating Audio...'
+                  : isPlaying
+                    ? 'Stop Preview'
+                    : `Preview ${activeLang} Audio`}
               </button>
             </div>
 
@@ -571,20 +737,32 @@ const AudioStage: React.FC<AudioStageProps> = ({ project }) => {
                         {output.status === 'completed' ? 'Ready' : output.status === 'error' ? 'Error' : 'Generating...'}
                       </p>
                     </div>
-                    {output.status === 'completed' && output.audioUrl && (
-                      <button
-                        onClick={() => handleDownload(output)}
-                        className="p-2 hover:bg-primary/20 rounded text-primary"
-                      >
-                        <span className="material-symbols-outlined text-[16px]">download</span>
-                      </button>
-                    )}
-                    {output.status === 'generating' && (
-                      <span className="material-symbols-outlined text-primary animate-spin text-[16px]">refresh</span>
-                    )}
-                    {output.status === 'error' && (
-                      <span className="material-symbols-outlined text-red-500 text-[16px]">error</span>
-                    )}
+                    <div className="flex items-center gap-1">
+                      {output.status === 'completed' && output.audioUrl && (
+                        <button
+                          onClick={() => handleDownload(output)}
+                          className="p-2 hover:bg-primary/20 rounded text-primary"
+                          title="Download"
+                        >
+                          <span className="material-symbols-outlined text-[16px]">download</span>
+                        </button>
+                      )}
+                      {output.status === 'generating' && (
+                        <span className="material-symbols-outlined text-primary animate-spin text-[16px]">refresh</span>
+                      )}
+                      {output.status === 'error' && (
+                        <span className="material-symbols-outlined text-red-500 text-[16px]">error</span>
+                      )}
+                      {output.status !== 'generating' && (
+                        <button
+                          onClick={() => handleDeleteOutput(output.id)}
+                          className="p-2 hover:bg-red-500/20 rounded text-red-400"
+                          title="Delete"
+                        >
+                          <span className="material-symbols-outlined text-[16px]">delete</span>
+                        </button>
+                      )}
+                    </div>
                   </div>
                 ))
               )}
