@@ -143,6 +143,11 @@ const Dashboard: React.FC<DashboardProps> = ({ projects, onOpenProject, onDelete
           <h1 className="text-3xl font-black tracking-tight text-white">Project Dashboard</h1>
           <p className="text-slate-500 mt-1">Manage multi-language audio guide production</p>
         </div>
+        {/* reArmenia Academy branding */}
+        <div className="flex items-center gap-4 text-sm text-[#93adc8] font-bold uppercase tracking-wide">
+          <img src="/reArmenia-AI-Transformation_logo.png" alt="reArmenia AI Transformation" className="h-14 w-auto" />
+          <span>Powered by <span className="text-primary font-black">reARMENIA Academy</span></span>
+        </div>
         <button
           onClick={() => setShowCreateModal(true)}
           className="flex items-center gap-2 px-5 py-2.5 bg-primary text-white font-bold rounded hover:bg-primary/90 transition-all shadow-lg shadow-primary/20"
