@@ -1,4 +1,3 @@
-
 import React, { useState, useEffect, useRef, useMemo } from 'react';
 import { MOCK_TERMS } from '../../constants.tsx';
 import { SourceAsset, Term, TermCategory } from '../../types';
@@ -56,7 +55,7 @@ const SourceStage: React.FC<SourceStageProps> = ({ assets, existingTerms, onAddA
   const [detectedTerms, setDetectedTerms] = useState<Term[]>(existingTerms || []);
   const [editingTermId, setEditingTermId] = useState<string | null>(null);
   const [playingTermId, setPlayingTermId] = useState<string | null>(null);
-  
+
   const logEndRef = useRef<HTMLDivElement>(null);
   const fileInputRef = useRef<HTMLInputElement>(null);
 
@@ -78,7 +77,7 @@ const SourceStage: React.FC<SourceStageProps> = ({ assets, existingTerms, onAddA
 
   const extractText = async (file: File): Promise<string> => {
     const extension = file.name.split('.').pop()?.toLowerCase();
-    
+
     if (extension === 'txt' || extension === 'md') {
       return new Promise((resolve) => {
         const reader = new FileReader();
@@ -124,8 +123,8 @@ const SourceStage: React.FC<SourceStageProps> = ({ assets, existingTerms, onAddA
     setIsProcessingFile(true);
     try {
       const extension = file.name.split('.').pop()?.toLowerCase();
-      const type = (['pdf', 'docx', 'txt', 'md', 'doc'].includes(extension || '')) 
-        ? (extension as any) 
+      const type = (['pdf', 'docx', 'txt', 'md', 'doc'].includes(extension || ''))
+        ? (extension as any)
         : 'txt';
 
       const content = await extractText(file);
@@ -153,14 +152,14 @@ const SourceStage: React.FC<SourceStageProps> = ({ assets, existingTerms, onAddA
 
   const runTermDetection = async () => {
     if (!selectedAsset || !selectedAsset.content) return;
-    
+
     setIsDetecting(true);
     setProgress(10);
     setLogs(['> Initializing AGMI Neural Lexicon Engine v5.1...', '> Accessing Gemini Pro for historical analysis...']);
-    
+
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
-      
+
       const response = await ai.models.generateContent({
         model: 'gemini-3-flash-preview',
         contents: `Analyze text from Armenian Genocide Museum archives. Extract glossary terms: toponym, figure, ethnonym, historical_term, or date. Provide text, type, ipa, matches, confidence.
@@ -189,7 +188,7 @@ const SourceStage: React.FC<SourceStageProps> = ({ assets, existingTerms, onAddA
       const extracted: any[] = JSON.parse(response.text || "[]");
       setProgress(70);
       setLogs(prev => [...prev, '> Mapping complete.', `> Found ${extracted.length} markers.`]);
-      
+
       const finalTerms: Term[] = extracted.map((t, idx) => ({
         ...t,
         id: `term-${idx}-${Date.now()}`,
@@ -211,29 +210,53 @@ const SourceStage: React.FC<SourceStageProps> = ({ assets, existingTerms, onAddA
   };
 
   const handlePlayIpa = async (term: Term) => {
-    if (!term.ipa || playingTermId) return;
+    if (playingTermId) return; // Already playing something
+    if (!term.text && !term.ipa) return; // Nothing to pronounce
+
+    console.log('[TTS] Attempting to pronounce:', { text: term.text, ipa: term.ipa });
+    console.log('[TTS] API Key present:', !!process.env.API_KEY);
+
     setPlayingTermId(term.id);
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
+
+      // Use the term text for pronunciation, optionally guided by IPA
+      const textToPronounce = term.text;
+      const ipaHint = term.ipa ? ` (pronunciation: ${term.ipa})` : '';
+      const prompt = `Say the word: "${textToPronounce}"${ipaHint}`;
+
+      console.log('[TTS] Sending prompt:', prompt);
+
       const response = await ai.models.generateContent({
         model: "gemini-2.5-flash-preview-tts",
-        contents: [{ parts: [{ text: `Pronounce: ${term.ipa}` }] }],
+        contents: [{ parts: [{ text: prompt }] }],
         config: {
           responseModalities: [Modality.AUDIO],
           speechConfig: { voiceConfig: { prebuiltVoiceConfig: { voiceName: 'Puck' } } }
         },
       });
+
+      console.log('[TTS] Response received:', response);
+
       const base64Audio = response.candidates?.[0]?.content?.parts?.[0]?.inlineData?.data;
       if (base64Audio) {
-        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({sampleRate: 24000});
+        console.log('[TTS] Audio data received, length:', base64Audio.length);
+        const audioCtx = new (window.AudioContext || (window as any).webkitAudioContext)({ sampleRate: 24000 });
         const audioBuffer = await decodeAudioData(decode(base64Audio), audioCtx, 24000, 1);
         const source = audioCtx.createBufferSource();
         source.buffer = audioBuffer;
         source.connect(audioCtx.destination);
         source.onended = () => { setPlayingTermId(null); audioCtx.close(); };
         source.start();
-      } else setPlayingTermId(null);
-    } catch { setPlayingTermId(null); }
+        console.log('[TTS] Audio playback started');
+      } else {
+        console.warn('[TTS] No audio data in response');
+        setPlayingTermId(null);
+      }
+    } catch (error) {
+      console.error('[TTS] Error:', error);
+      setPlayingTermId(null);
+    }
   };
 
   const groupedTerms = useMemo(() => {
@@ -267,12 +290,12 @@ const SourceStage: React.FC<SourceStageProps> = ({ assets, existingTerms, onAddA
       {editingTermId && activeEditingTerm && (
         <div className="fixed inset-0 z-[100] flex items-center justify-center p-4 bg-black/80 backdrop-blur-sm">
           <div className="bg-surface-dark border border-border-dark rounded-xl max-w-md w-full shadow-2xl p-8">
-               <h3 className="text-xl font-bold text-white mb-6 uppercase tracking-tight">Edit Term</h3>
-               <div className="space-y-4">
-                  <input className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white outline-none" value={activeEditingTerm.text} onChange={(e) => setDetectedTerms(prev => prev.map(t => t.id === editingTermId ? {...t, text: e.target.value} : t))} />
-                  <input className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-primary font-mono outline-none" value={activeEditingTerm.ipa || ''} onChange={(e) => setDetectedTerms(prev => prev.map(t => t.id === editingTermId ? {...t, ipa: e.target.value} : t))} />
-                  <button onClick={() => { setEditingTermId(null); onUpdateTerms(detectedTerms); }} className="w-full py-3 bg-primary text-white font-black text-[10px] uppercase tracking-widest rounded hover:bg-primary/90 transition-all">Save & Close</button>
-               </div>
+            <h3 className="text-xl font-bold text-white mb-6 uppercase tracking-tight">Edit Term</h3>
+            <div className="space-y-4">
+              <input className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white outline-none" value={activeEditingTerm.text} onChange={(e) => setDetectedTerms(prev => prev.map(t => t.id === editingTermId ? { ...t, text: e.target.value } : t))} />
+              <input className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-primary font-mono outline-none" value={activeEditingTerm.ipa || ''} onChange={(e) => setDetectedTerms(prev => prev.map(t => t.id === editingTermId ? { ...t, ipa: e.target.value } : t))} />
+              <button onClick={() => { setEditingTermId(null); onUpdateTerms(detectedTerms); }} className="w-full py-3 bg-primary text-white font-black text-[10px] uppercase tracking-widest rounded hover:bg-primary/90 transition-all">Save & Close</button>
+            </div>
           </div>
         </div>
       )}

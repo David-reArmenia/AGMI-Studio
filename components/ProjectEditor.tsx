@@ -1,9 +1,9 @@
-
 import React from 'react';
 import { Project, Stage, SourceAsset, Term, TranslationData } from '../types';
 import SourceStage from './stages/SourceStage';
 import TranslationStage from './stages/TranslationStage';
 import AudioStage from './stages/AudioStage';
+import LoadingOverlay from './LoadingOverlay';
 
 interface ProjectEditorProps {
   project: Project;
@@ -17,18 +17,18 @@ interface ProjectEditorProps {
   onSubmitToTranslation: () => void;
 }
 
-const ProjectEditor: React.FC<ProjectEditorProps> = ({ 
-  project, 
-  activeStage, 
+const ProjectEditor: React.FC<ProjectEditorProps> = ({
+  project,
+  activeStage,
   isProcessing,
-  onStageChange, 
-  onAddAsset, 
-  onRemoveAsset, 
+  onStageChange,
+  onAddAsset,
+  onRemoveAsset,
   onUpdateTerms,
   onUpdateTranslations,
-  onSubmitToTranslation 
+  onSubmitToTranslation
 }) => {
-  
+
   const handleExport = () => {
     const data = project.terms || [];
     if (data.length === 0) {
@@ -36,7 +36,7 @@ const ProjectEditor: React.FC<ProjectEditorProps> = ({
       return;
     }
     const dataStr = JSON.stringify(data, null, 2);
-    const dataUri = 'data:application/json;charset=utf-8,'+ encodeURIComponent(dataStr);
+    const dataUri = 'data:application/json;charset=utf-8,' + encodeURIComponent(dataStr);
     const linkElement = document.createElement('a');
     linkElement.setAttribute('href', dataUri);
     linkElement.setAttribute('download', `${project.name.replace(/\s+/g, '_')}_Glossary.json`);
@@ -60,7 +60,7 @@ const ProjectEditor: React.FC<ProjectEditorProps> = ({
                 <span className={`h-2 w-2 rounded-full ${isProcessing ? 'animate-pulse bg-primary' : (activeStage === Stage.AUDIO_PRODUCTION ? 'bg-emerald-500' : 'bg-primary')}`}></span>
                 <span>{isProcessing ? 'Processing AI Data...' : `Stage ${activeStage + 1}: ${Stage[activeStage].replace('_', ' ')}`}</span>
               </div>
-              <button 
+              <button
                 onClick={handleExport}
                 className="text-xs font-bold text-[#93adc8] hover:text-white flex items-center gap-1 uppercase tracking-widest"
               >
@@ -68,23 +68,23 @@ const ProjectEditor: React.FC<ProjectEditorProps> = ({
               </button>
             </div>
           </div>
-          
+
           <div className="flex gap-8">
-            <button 
+            <button
               onClick={() => onStageChange(Stage.SOURCE_MATERIALS)}
               className={`pb-3 text-[11px] font-black tracking-widest flex items-center gap-2 uppercase transition-all ${activeStage === Stage.SOURCE_MATERIALS ? 'border-b-2 border-primary text-white' : 'text-[#93adc8] hover:text-white border-b-2 border-transparent'}`}
             >
               <span className="material-symbols-outlined text-[18px]">description</span>
               SOURCE MATERIALS
             </button>
-            <button 
+            <button
               onClick={() => onStageChange(Stage.TRANSLATION)}
               className={`pb-3 text-[11px] font-black tracking-widest flex items-center gap-2 uppercase transition-all ${activeStage === Stage.TRANSLATION ? 'border-b-2 border-primary text-white' : 'text-[#93adc8] hover:text-white border-b-2 border-transparent'}`}
             >
               <span className="material-symbols-outlined text-[18px]">translate</span>
               TRANSLATION
             </button>
-            <button 
+            <button
               onClick={() => onStageChange(Stage.AUDIO_PRODUCTION)}
               className={`pb-3 text-[11px] font-black tracking-widest flex items-center gap-2 uppercase transition-all ${activeStage === Stage.AUDIO_PRODUCTION ? 'border-b-2 border-primary text-white' : 'text-[#93adc8] hover:text-white border-b-2 border-transparent'}`}
             >
@@ -96,19 +96,26 @@ const ProjectEditor: React.FC<ProjectEditorProps> = ({
       </div>
 
       {/* Stage Viewport */}
-      <div className="flex-1 overflow-hidden">
+      <div className="flex-1 overflow-hidden relative">
+        {/* Translation Processing Overlay */}
+        <LoadingOverlay
+          isVisible={isProcessing}
+          message="Translating Content"
+          subMessage={`Generating ${project.targetLangs.filter(l => l !== project.sourceLang).join(', ')} translations with AI`}
+        />
+
         {activeStage === Stage.SOURCE_MATERIALS && (
-          <SourceStage 
-            assets={project.assets} 
+          <SourceStage
+            assets={project.assets}
             existingTerms={project.terms}
             onAddAsset={onAddAsset}
-            onRemoveAsset={onRemoveAsset} 
+            onRemoveAsset={onRemoveAsset}
             onUpdateTerms={onUpdateTerms}
             onSubmit={onSubmitToTranslation}
           />
         )}
         {activeStage === Stage.TRANSLATION && (
-          <TranslationStage 
+          <TranslationStage
             project={project}
             onUpdateTranslations={onUpdateTranslations}
             onProceed={() => onStageChange(Stage.AUDIO_PRODUCTION)}

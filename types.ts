@@ -37,7 +37,7 @@ export interface Project {
   status: WorkflowStatus;
   progress: number;
   assets: SourceAsset[];
-  terms?: Term[]; 
+  terms?: Term[];
   translations?: Record<string, TranslationData>; // Lang code -> Data
 }
 
@@ -51,4 +51,41 @@ export interface Term {
   matches: number;
   confidence: number;
   status: 'verified' | 'warning' | 'unresolved';
+}
+
+// TTS Types
+export enum TTSVendor {
+  GOOGLE = 'google',
+  ELEVENLABS = 'elevenlabs',
+  OPENAI = 'openai'
+}
+
+export interface VoiceProfile {
+  id: string;
+  name: string;
+  vendor: TTSVendor;
+  tags: string[];
+  languages: string[];
+  sampleUrl?: string;
+  description?: string;
+}
+
+export interface TTSSettings {
+  vendor: TTSVendor;
+  voiceId: string;
+  emphasis: number;      // 0.0 - 2.0
+  solemnity: number;     // 0.0 - 2.0
+  pacing: number;        // 0.5 - 2.0
+  format: 'mp3' | 'wav' | 'ogg';
+}
+
+export interface AudioOutput {
+  id: string;
+  language: string;
+  fileName: string;
+  status: 'pending' | 'generating' | 'completed' | 'error';
+  progress: number;
+  audioUrl?: string;
+  error?: string;
+  createdAt: string;
 }
