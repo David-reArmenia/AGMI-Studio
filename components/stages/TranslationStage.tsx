@@ -78,21 +78,22 @@ const TranslationStage: React.FC<TranslationStageProps> = ({ project, onUpdateTr
   };
 
   const runTermDetection = async () => {
-    const sourceContent = project.assets[0]?.content;
-    if (!sourceContent) return;
+    // Use the target language translation content instead of source
+    const targetContent = currentTranslation?.content;
+    if (!targetContent) return;
 
     setIsDetecting(true);
-    setLogs(['> Initializing AGMI Neural Lexicon Engine v5.1...', '> Accessing Gemini Pro for historical analysis...']);
+    setLogs(['> Initializing AGMI Neural Lexicon Engine v5.1...', `> Analyzing ${activeLang} translation content...`]);
 
     try {
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
       const response = await ai.models.generateContent({
         model: 'gemini-2.0-flash',
-        contents: `Analyze text from Armenian Genocide Museum archives. Extract glossary terms: toponym, figure, ethnonym, historical_term, or date. Provide text, type, ipa, matches, confidence.
+        contents: `Analyze this ${activeLang} text from Armenian Genocide Museum archives. Extract glossary terms: toponym, figure, ethnonym, historical_term, or date. Provide text, type, ipa (for ${activeLang} pronunciation), matches, confidence.
         
         Text:
-        ${sourceContent.substring(0, 5000)}`,
+        ${targetContent.substring(0, 5000)}`,
         config: {
           responseMimeType: "application/json",
           responseSchema: {
@@ -181,6 +182,27 @@ const TranslationStage: React.FC<TranslationStageProps> = ({ project, onUpdateTr
 
   const categoryLabels: Record<TermCategory, string> = { toponym: 'Toponyms', figure: 'Historical Figures', ethnonym: 'Ethnonyms', historical_term: 'Historical Terms', date: 'Dates' };
   const categoryColors: Record<TermCategory, string> = { toponym: 'text-blue-400 border-blue-900/30', figure: 'text-emerald-400 border-emerald-900/30', ethnonym: 'text-purple-400 border-purple-900/30', historical_term: 'text-amber-400 border-amber-900/30', date: 'text-rose-400 border-rose-900/30' };
+  const categoryHighlightColors: Record<TermCategory, string> = {
+    toponym: 'bg-blue-500/20 text-blue-300 border-b border-blue-500/50',
+    figure: 'bg-emerald-500/20 text-emerald-300 border-b border-emerald-500/50',
+    ethnonym: 'bg-purple-500/20 text-purple-300 border-b border-purple-500/50',
+    historical_term: 'bg-amber-500/20 text-amber-300 border-b border-amber-500/50',
+    date: 'bg-rose-500/20 text-rose-300 border-b border-rose-500/50'
+  };
+
+  const renderHighlightedText = (text: string) => {
+    if (!detectedTerms.length) return text;
+    const sortedTerms = [...detectedTerms].sort((a, b) => b.text.length - a.text.length);
+    const escapedTerms = sortedTerms.map(t => t.text.replace(/[.*+?^${}()|[\]\\]/g, '\\$&'));
+    const regex = new RegExp(`(${escapedTerms.join('|')})`, 'gi');
+    return text.split(regex).map((part, i) => {
+      const match = sortedTerms.find(t => t.text.toLowerCase() === part.toLowerCase());
+      if (match) {
+        return <span key={i} className={`${categoryHighlightColors[match.type]} px-0.5 rounded cursor-help transition-all hover:brightness-125`} title={`${match.type}: ${match.ipa || 'No IPA'}`}>{part}</span>;
+      }
+      return part;
+    });
+  };
 
   const activeEditingTerm = detectedTerms.find(t => t.id === editingTermId);
 
@@ -275,12 +297,21 @@ const TranslationStage: React.FC<TranslationStageProps> = ({ project, onUpdateTr
               <div className="space-y-4">
                 <div className="flex justify-between items-center">
                   <span className="text-[9px] font-black uppercase tracking-widest text-[#5a7187]">Full Text Segment</span>
+                  {detectedTerms.length > 0 && <span className="text-[8px] text-emerald-400 uppercase">{detectedTerms.length} terms highlighted</span>}
                 </div>
-                <textarea
-                  className="w-full bg-surface-dark/40 border border-border-dark rounded-lg p-5 text-lg leading-relaxed min-h-[500px] focus:ring-1 focus:ring-primary outline-none transition-all text-white font-serif"
-                  value={currentTranslation.content}
-                  onChange={(e) => handleTextChange(e.target.value)}
-                />
+                {detectedTerms.length > 0 ? (
+                  <div className="w-full bg-surface-dark/40 border border-border-dark rounded-lg p-5 text-lg leading-relaxed min-h-[400px] text-white font-serif">
+                    {currentTranslation.content.split('\n').map((line, idx) => (
+                      <p key={idx} className="mb-4">{renderHighlightedText(line)}</p>
+                    ))}
+                  </div>
+                ) : (
+                  <textarea
+                    className="w-full bg-surface-dark/40 border border-border-dark rounded-lg p-5 text-lg leading-relaxed min-h-[500px] focus:ring-1 focus:ring-primary outline-none transition-all text-white font-serif"
+                    value={currentTranslation.content}
+                    onChange={(e) => handleTextChange(e.target.value)}
+                  />
+                )}
               </div>
             )}
           </div>
@@ -291,8 +322,8 @@ const TranslationStage: React.FC<TranslationStageProps> = ({ project, onUpdateTr
           <div className="p-4 border-b border-border-dark bg-surface-dark/10">
             <button
               onClick={runTermDetection}
-              disabled={isDetecting || !project.assets[0]?.content}
-              className={`w-full font-black py-2.5 text-[10px] uppercase tracking-[0.2em] rounded flex items-center justify-center gap-2 ${isDetecting ? 'bg-border-dark text-[#5a7187]' : 'bg-museum-gold text-black shadow-lg shadow-museum-gold/10'}`}
+              disabled={isDetecting || !currentTranslation?.content}
+              className={`w-full font-black py-2.5 text-[10px] uppercase tracking-[0.2em] rounded flex items-center justify-center gap-2 ${isDetecting || !currentTranslation?.content ? 'bg-border-dark text-[#5a7187]' : 'bg-museum-gold text-black shadow-lg shadow-museum-gold/10'}`}
             >
               {isDetecting ? <span className="material-symbols-outlined animate-spin">refresh</span> : <span className="material-symbols-outlined">cognition</span>}
               {isDetecting ? 'Processing...' : 'Run Term Detection'}
@@ -339,7 +370,7 @@ const TranslationStage: React.FC<TranslationStageProps> = ({ project, onUpdateTr
           onClick={onProceed}
           className="px-8 py-2.5 bg-primary text-white font-black text-[10px] uppercase tracking-[0.2em] rounded shadow-lg shadow-primary/20 hover:bg-primary/90 transition-all flex items-center gap-2"
         >
-          Proceed to Audio Production
+          Go to Audio Generation
           <span className="material-symbols-outlined text-lg">keyboard_double_arrow_right</span>
         </button>
       </footer>

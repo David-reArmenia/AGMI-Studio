@@ -255,7 +255,7 @@ const SourceStage: React.FC<SourceStageProps> = ({ assets, onAddAsset, onRemoveA
             <div className="size-6 rounded-full bg-blue-900 flex items-center justify-center">MK</div>
           </div>
           <button onClick={onSubmit} disabled={!selectedAsset} className={`px-6 py-2 font-black text-[10px] uppercase tracking-[0.2em] rounded flex items-center gap-2 transition-all ${!selectedAsset ? 'bg-border-dark text-[#5a7187] cursor-not-allowed' : 'bg-primary hover:bg-primary/90 text-white'}`}>
-            Submit to Translation <span className="material-symbols-outlined text-sm">arrow_right_alt</span>
+            Go to Translation <span className="material-symbols-outlined text-sm">arrow_right_alt</span>
           </button>
         </footer>
       </section>
@@ -288,8 +288,8 @@ const SourceStage: React.FC<SourceStageProps> = ({ assets, onAddAsset, onRemoveA
                 onClick={() => handleAiAction(tool.id)}
                 disabled={isAiProcessing || !editableContent.trim()}
                 className={`w-full p-3 rounded-lg border transition-all flex items-center gap-3 group ${isAiProcessing || !editableContent.trim()
-                    ? 'bg-surface-dark/30 border-border-dark/50 text-[#5a7187] cursor-not-allowed'
-                    : 'bg-surface-dark border-border-dark hover:border-violet-500/50 hover:bg-violet-500/5'
+                  ? 'bg-surface-dark/30 border-border-dark/50 text-[#5a7187] cursor-not-allowed'
+                  : 'bg-surface-dark border-border-dark hover:border-violet-500/50 hover:bg-violet-500/5'
                   }`}
               >
                 <span className={`material-symbols-outlined text-lg ${isAiProcessing || !editableContent.trim() ? 'text-[#5a7187]' : 'text-violet-400 group-hover:text-violet-300'
