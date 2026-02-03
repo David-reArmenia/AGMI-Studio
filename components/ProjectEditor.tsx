@@ -125,7 +125,13 @@ const ProjectEditor: React.FC<ProjectEditorProps> = ({
             onProceed={() => onStageChange(Stage.AUDIO_PRODUCTION)}
           />
         )}
-        {activeStage === Stage.AUDIO_PRODUCTION && <AudioStage project={project} onUpdateOutputs={onUpdateAudioOutputs} />}
+        {activeStage === Stage.AUDIO_PRODUCTION && (
+          <AudioStage
+            project={project}
+            onUpdateOutputs={onUpdateAudioOutputs}
+            onUpdateTranslations={onUpdateTranslations}
+          />
+        )}
       </div>
     </div>
   );

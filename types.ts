@@ -26,6 +26,7 @@ export interface TranslationData {
   content: string;
   terms: Term[];
   status: 'DRAFT' | 'COMPLETED' | 'IN_PROGRESS';
+  ssml?: string; // Manual SSML override
 }
 
 export interface Project {
