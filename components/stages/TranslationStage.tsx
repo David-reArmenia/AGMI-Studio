@@ -46,8 +46,30 @@ const TranslationStage: React.FC<TranslationStageProps> = ({ project, onUpdateTr
   const [detectedTerms, setDetectedTerms] = useState<Term[]>(project.terms || []);
   const [editingTermId, setEditingTermId] = useState<string | null>(null);
   const [playingTermId, setPlayingTermId] = useState<string | null>(null);
+  const [collapsedCategories, setCollapsedCategories] = useState<Record<TermCategory, boolean>>({
+    toponym: false,
+    figure: false,
+    ethnonym: false,
+    historical_term: false,
+    date: false
+  });
 
   const currentTranslation = project.translations?.[activeLang];
+
+  // Sync detected terms with current translation
+  useEffect(() => {
+    if (currentTranslation?.terms) {
+      setDetectedTerms(currentTranslation.terms);
+    } else if (project.terms && (!currentTranslation || !currentTranslation.terms)) {
+      // Fallback to project-level terms only if translation specific terms missing
+      setDetectedTerms(project.terms);
+    }
+  }, [activeLang, currentTranslation?.terms, project.terms]);
+
+  // Toggle category collapse
+  const toggleCategory = (category: TermCategory) => {
+    setCollapsedCategories(prev => ({ ...prev, [category]: !prev[category] }));
+  };
 
   // Check if active language matches source language (no translation needed)
   const isSourceLanguage = activeLang === project.sourceLang;
@@ -62,7 +84,13 @@ const TranslationStage: React.FC<TranslationStageProps> = ({ project, onUpdateTr
   const handleTermIPAChange = (termId: string, newIPA: string) => {
     const updatedTerms = detectedTerms.map(t => t.id === termId ? { ...t, ipa: newIPA } : t);
     setDetectedTerms(updatedTerms);
-    onUpdateTerms(updatedTerms);
+
+    // Persist to current translation
+    if (currentTranslation) {
+      const updated = { ...project.translations };
+      updated[activeLang] = { ...currentTranslation, terms: updatedTerms };
+      onUpdateTranslations(updated);
+    }
   };
 
   // Copy source content directly to target (for same language - skip translation)
@@ -123,7 +151,14 @@ const TranslationStage: React.FC<TranslationStageProps> = ({ project, onUpdateTr
       }));
 
       setDetectedTerms(finalTerms);
-      onUpdateTerms(finalTerms);
+
+      // Persist to current translation specifically
+      if (currentTranslation) {
+        const updated = { ...project.translations };
+        updated[activeLang] = { ...currentTranslation, terms: finalTerms };
+        onUpdateTranslations(updated);
+      }
+
       setLogs(prev => [...prev, `> Analysis complete.`]);
     } catch (err) {
       console.error("Detection Error:", err);
@@ -139,13 +174,15 @@ const TranslationStage: React.FC<TranslationStageProps> = ({ project, onUpdateTr
 
     setPlayingTermId(term.id);
     try {
+      console.log('[handlePlayIpa] Playing:', term.text, 'with IPA:', term.ipa);
       const ai = new GoogleGenAI({ apiKey: process.env.API_KEY });
 
       // Prioritize IPA transcription if available - use it as the primary pronunciation guide
       let prompt: string;
       if (term.ipa && term.ipa.trim()) {
-        // When IPA is provided, instruct to follow the exact pronunciation
-        prompt = `Pronounce the word "${term.text}" exactly following this IPA transcription: ${term.ipa}. Say only the word, nothing else.`;
+        const cleanIpa = term.ipa.replace(/\//g, '').trim();
+        // Stronger instruction for specific pronunciation
+        prompt = `Pronounce the word "${term.text}" using this exact IPA transcription: /${cleanIpa}/. Output ONLY the spoken word.`;
       } else {
         prompt = `Say the word: "${term.text}"`;
       }
@@ -219,9 +256,39 @@ const TranslationStage: React.FC<TranslationStageProps> = ({ project, onUpdateTr
           <div className="bg-surface-dark border border-border-dark rounded-xl max-w-md w-full shadow-2xl p-8">
             <h3 className="text-xl font-bold text-white mb-6 uppercase tracking-tight">Edit Term</h3>
             <div className="space-y-4">
-              <input className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white outline-none" value={activeEditingTerm.text} onChange={(e) => setDetectedTerms(prev => prev.map(t => t.id === editingTermId ? { ...t, text: e.target.value } : t))} />
-              <input className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-primary font-mono outline-none" value={activeEditingTerm.ipa || ''} onChange={(e) => setDetectedTerms(prev => prev.map(t => t.id === editingTermId ? { ...t, ipa: e.target.value } : t))} />
-              <button onClick={() => { setEditingTermId(null); onUpdateTerms(detectedTerms); }} className="w-full py-3 bg-primary text-white font-black text-[10px] uppercase tracking-widest rounded hover:bg-primary/90 transition-all">Save & Close</button>
+              <input
+                className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-white outline-none focus:border-primary transition-colors"
+                value={activeEditingTerm.text}
+                onChange={(e) => setDetectedTerms(prev => prev.map(t => t.id === editingTermId ? { ...t, text: e.target.value } : t))}
+                placeholder="Term text"
+              />
+              <input
+                className="w-full bg-background-dark border border-border-dark rounded-lg px-4 py-3 text-primary font-mono outline-none focus:border-primary transition-colors"
+                value={activeEditingTerm.ipa || ''}
+                onChange={(e) => setDetectedTerms(prev => prev.map(t => t.id === editingTermId ? { ...t, ipa: e.target.value } : t))}
+                placeholder="IPA Transcription"
+              />
+              <div className="flex gap-3">
+                <button
+                  onClick={() => setEditingTermId(null)}
+                  className="flex-1 py-3 bg-white/5 text-white font-black text-[10px] uppercase tracking-widest rounded hover:bg-white/10 transition-all"
+                >
+                  Cancel
+                </button>
+                <button
+                  onClick={() => {
+                    setEditingTermId(null);
+                    if (currentTranslation) {
+                      const updated = { ...project.translations };
+                      updated[activeLang] = { ...currentTranslation, terms: detectedTerms };
+                      onUpdateTranslations(updated);
+                    }
+                  }}
+                  className="flex-1 py-3 bg-primary text-white font-black text-[10px] uppercase tracking-widest rounded hover:bg-primary/90 transition-all"
+                >
+                  Save & Close
+                </button>
+              </div>
             </div>
           </div>
         </div>
@@ -337,33 +404,45 @@ const TranslationStage: React.FC<TranslationStageProps> = ({ project, onUpdateTr
               {logs.map((log, i) => <div key={i} className="mb-0.5">{log}</div>)}
             </div>
           </div>
-          <div className="flex-1 overflow-y-auto p-4 space-y-6 custom-scrollbar">
+          <div className="flex-1 overflow-y-auto p-4 space-y-4 custom-scrollbar">
             {(Object.entries(groupedTerms) as [TermCategory, Term[]][]).map(([category, terms]) => (
-              <div key={category}>
-                <div className={`flex items-center justify-between mb-3 border-b pb-1 ${categoryColors[category as TermCategory]}`}>
-                  <h4 className="text-[10px] font-black uppercase tracking-widest">{categoryLabels[category as TermCategory]}</h4>
-                  <span className="text-[9px] font-bold opacity-60 uppercase">{terms.length}</span>
-                </div>
-                <div className="space-y-2">
-                  {terms.map(term => (
-                    <div key={term.id} className="bg-surface-dark border border-border-dark/60 rounded-lg p-3 group/term hover:border-primary/40 transition-all">
-                      <div className="flex justify-between items-start mb-2">
-                        <span className="text-[11px] font-bold text-white tracking-wide uppercase truncate">{term.text}</span>
-                        <div className="flex items-center gap-1">
-                          <button onClick={() => setEditingTermId(term.id)} className="p-1 hover:bg-primary/10 rounded text-[#5a7187] hover:text-primary">
-                            <span className="material-symbols-outlined text-[14px]">edit</span>
+              <div key={category} className="border border-border-dark/40 rounded-lg overflow-hidden">
+                {/* Collapsible Header */}
+                <button
+                  onClick={() => toggleCategory(category as TermCategory)}
+                  className={`w-full flex items-center justify-between p-3 bg-surface-dark/30 hover:bg-surface-dark/50 transition-all ${categoryColors[category as TermCategory]}`}
+                >
+                  <div className="flex items-center gap-2">
+                    <span className={`material-symbols-outlined text-sm transition-transform ${collapsedCategories[category as TermCategory] ? '' : 'rotate-90'}`}>
+                      chevron_right
+                    </span>
+                    <h4 className="text-[10px] font-black uppercase tracking-widest">{categoryLabels[category as TermCategory]}</h4>
+                  </div>
+                  <span className="text-[9px] font-bold opacity-60 uppercase bg-border-dark/50 px-2 py-0.5 rounded">{terms.length}</span>
+                </button>
+                {/* Collapsible Content */}
+                {!collapsedCategories[category as TermCategory] && (
+                  <div className="p-3 space-y-2 bg-background-dark/30">
+                    {terms.map(term => (
+                      <div key={term.id} className="bg-surface-dark border border-border-dark/60 rounded-lg p-3 group/term hover:border-primary/40 transition-all">
+                        <div className="flex justify-between items-start mb-2">
+                          <span className="text-[11px] font-bold text-white tracking-wide uppercase truncate">{term.text}</span>
+                          <div className="flex items-center gap-1">
+                            <button onClick={() => setEditingTermId(term.id)} className="p-1 hover:bg-primary/10 rounded text-[#5a7187] hover:text-primary">
+                              <span className="material-symbols-outlined text-[14px]">edit</span>
+                            </button>
+                          </div>
+                        </div>
+                        <div className="flex justify-between items-center">
+                          <span className="text-[10px] text-primary font-mono">{term.ipa}</span>
+                          <button onClick={() => handlePlayIpa(term)} className={`material-symbols-outlined text-sm ${playingTermId === term.id ? 'text-primary animate-pulse' : 'text-[#5a7187] hover:text-white'}`}>
+                            {playingTermId === term.id ? 'graphic_eq' : 'volume_up'}
                           </button>
                         </div>
                       </div>
-                      <div className="flex justify-between items-center">
-                        <span className="text-[10px] text-primary font-mono">{term.ipa}</span>
-                        <button onClick={() => handlePlayIpa(term)} className={`material-symbols-outlined text-sm ${playingTermId === term.id ? 'text-primary animate-pulse' : 'text-[#5a7187] hover:text-white'}`}>
-                          {playingTermId === term.id ? 'graphic_eq' : 'volume_up'}
-                        </button>
-                      </div>
-                    </div>
-                  ))}
-                </div>
+                    ))}
+                  </div>
+                )}
               </div>
             ))}
           </div>
