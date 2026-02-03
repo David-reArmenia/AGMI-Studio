@@ -94,9 +94,11 @@ const AudioStage: React.FC<AudioStageProps> = ({ project, onUpdateOutputs, onUpd
   const [settings, setSettings] = useState<TTSSettings>({
     vendor: TTSVendor.GOOGLE,
     voiceId: 'Charon',
-    emphasis: 0.85,
-    solemnity: 1.2,
-    pacing: 0.95,
+    ambience: 0.5,
+    pacing: 1.0,
+    pitch: 1.0,
+    expressiveness: 0.5,
+    pausing: 0.5,
     format: 'mp3',
   });
 
@@ -126,6 +128,11 @@ const AudioStage: React.FC<AudioStageProps> = ({ project, onUpdateOutputs, onUpd
   const [playingTermId, setPlayingTermId] = useState<string | null>(null);
   const [tempTerm, setTempTerm] = useState<Term | null>(null);
 
+  // Split View State
+  const [splitRatio, setSplitRatio] = useState(0.6); // 60% Script, 40% Advanced
+  const [isResizing, setIsResizing] = useState(false);
+  const splitPaneRef = useRef<HTMLDivElement>(null);
+
   // Refs for audio playback control
   const audioSourceRef = useRef<AudioBufferSourceNode | null>(null);
   const audioContextRef = useRef<AudioContext | null>(null);
@@ -134,6 +141,45 @@ const AudioStage: React.FC<AudioStageProps> = ({ project, onUpdateOutputs, onUpd
   // Get current translation
   const currentTranslation = project.translations?.[activeLang];
   const currentTerms = currentTranslation?.terms || project.terms || [];
+
+  // Handle Resize
+  const startResizing = useCallback((e: React.MouseEvent) => {
+    e.preventDefault();
+    setIsResizing(true);
+  }, []);
+
+  const stopResizing = useCallback(() => {
+    setIsResizing(false);
+  }, []);
+
+  const resize = useCallback((e: MouseEvent) => {
+    if (isResizing && splitPaneRef.current) {
+      const rect = splitPaneRef.current.getBoundingClientRect();
+      const newHeight = e.clientY - rect.top;
+      const totalHeight = rect.height;
+      let newRatio = newHeight / totalHeight;
+
+      // Clamp ratio
+      if (newRatio < 0.2) newRatio = 0.2;
+      if (newRatio > 0.8) newRatio = 0.8;
+
+      setSplitRatio(newRatio);
+    }
+  }, [isResizing]);
+
+  useEffect(() => {
+    if (isResizing) {
+      window.addEventListener('mousemove', resize);
+      window.addEventListener('mouseup', stopResizing);
+    } else {
+      window.removeEventListener('mousemove', resize);
+      window.removeEventListener('mouseup', stopResizing);
+    }
+    return () => {
+      window.removeEventListener('mousemove', resize);
+      window.removeEventListener('mouseup', stopResizing);
+    };
+  }, [isResizing, resize, stopResizing]);
 
   // Filter voices by selected vendor
   const availableVoices = useMemo(() => {
@@ -279,7 +325,7 @@ const AudioStage: React.FC<AudioStageProps> = ({ project, onUpdateOutputs, onUpd
   }, []);
 
   // Handle slider changes
-  const handleSliderChange = useCallback((key: 'emphasis' | 'solemnity' | 'pacing', value: number) => {
+  const handleSliderChange = useCallback((key: keyof TTSSettings, value: any) => {
     setSettings(prev => ({ ...prev, [key]: value }));
   }, []);
 
@@ -312,10 +358,8 @@ const AudioStage: React.FC<AudioStageProps> = ({ project, onUpdateOutputs, onUpd
 
     setIsPlaying(true);
 
-    // Show "Generating..." after 1 second if still loading
-    generatingTimeoutRef.current = setTimeout(() => {
-      setIsGeneratingPreview(true);
-    }, 1000);
+    // Show "Generating..." immediately
+    setIsGeneratingPreview(true);
 
     try {
       console.log('[TTS Preview] === DEBUG START ===');
@@ -424,9 +468,15 @@ const AudioStage: React.FC<AudioStageProps> = ({ project, onUpdateOutputs, onUpd
       }
     } catch (error: any) {
       console.error('[TTS Preview] === ERROR ===');
-      console.error('[TTS Preview] Error name:', error?.name);
-      console.error('[TTS Preview] Error message:', error?.message);
       console.error('[TTS Preview] Full error:', error);
+
+      const errorMessage = error?.message || '';
+      if (errorMessage.includes('429') || errorMessage.includes('quota') || errorMessage.includes('RESOURCE_EXHAUSTED')) {
+        alert("Google Gemini API Quota Exceeded.\n\nPlease check your billing details in Google AI Studio or wait for the quota to reset.\nLimit: 0 indicates the API might not be enabled or you are on a restricted plan.");
+      } else {
+        alert(`TTS Preview Failed: ${errorMessage}`);
+      }
+
       setIsPlaying(false);
     } finally {
       // Clear the generating timeout and state
@@ -448,7 +498,7 @@ const AudioStage: React.FC<AudioStageProps> = ({ project, onUpdateOutputs, onUpd
     const timestamp = `${now.getFullYear()}-${String(now.getMonth() + 1).padStart(2, '0')}-${String(now.getDate()).padStart(2, '0')}T${String(now.getHours()).padStart(2, '0')}-${String(now.getMinutes()).padStart(2, '0')}-${String(now.getSeconds()).padStart(2, '0')}`;
     const projectName = project.name.replace(/\s+/g, '_');
     const vendorName = settings.vendor.toUpperCase();
-    const settingsStr = `${vendorName},${settings.voiceId},e${(settings.emphasis * 100).toFixed(0)},s${(settings.solemnity * 100).toFixed(0)},p${(settings.pacing * 100).toFixed(0)}`;
+    const settingsStr = `${vendorName},${settings.voiceId},a${(settings.ambience * 100).toFixed(0)},Pi${(settings.pitch * 100).toFixed(0)},Pa${(settings.pacing * 100).toFixed(0)},Ex${(settings.expressiveness * 100).toFixed(0)},Pu${(settings.pausing * 100).toFixed(0)}`;
     const fileName = `${projectName}_(${settingsStr})_${timestamp}.${settings.format}`;
 
     const newOutput: AudioOutput = {
@@ -584,13 +634,21 @@ const AudioStage: React.FC<AudioStageProps> = ({ project, onUpdateOutputs, onUpd
       } else {
         throw new Error('No audio data received');
       }
-    } catch (error) {
+    } catch (error: any) {
       console.error('[TTS Generate] Error:', error);
+
+      const errorMessage = error?.message || String(error);
+      const isQuotaError = errorMessage.includes('429') || errorMessage.includes('quota') || errorMessage.includes('RESOURCE_EXHAUSTED');
+
       setOutputs(prev => prev.map(o =>
         o.id === outputId
-          ? { ...o, status: 'error', error: String(error) }
+          ? { ...o, status: 'error', error: isQuotaError ? 'Quota Exceeded' : errorMessage }
           : o
       ));
+
+      if (isQuotaError) {
+        alert("Google Gemini API Quota Exceeded.\n\nPlease check your billing details in Google AI Studio.");
+      }
     } finally {
       setIsGenerating(false);
       setGenerationProgress(0);
@@ -786,10 +844,13 @@ const AudioStage: React.FC<AudioStageProps> = ({ project, onUpdateOutputs, onUpd
 
         {/* Center Panel: Content (Text, SSML, terms) */}
         {/* Center Panel: Content (Text, SSML, terms) */}
-        <section className="flex-1 flex flex-col bg-background-dark overflow-hidden">
+        <section ref={splitPaneRef} className="flex-1 flex flex-col bg-background-dark overflow-hidden relative">
           {/* Script Area */}
-          <div className={`${showAdvanced ? 'flex-[0.6]' : 'flex-1'} transition-all duration-300 border-b border-border-dark p-6 flex flex-col overflow-hidden`}>
-            <div className="flex justify-between items-center mb-4">
+          <div
+            style={{ flex: showAdvanced ? splitRatio : 1 }}
+            className="transition-[flex] duration-100 border-b border-border-dark p-6 flex flex-col overflow-hidden min-h-[100px]"
+          >
+            <div className="flex justify-between items-center mb-4 shrink-0">
               <div className="flex items-center gap-3">
                 <h2 className="text-lg font-black text-white tracking-tight uppercase">Narration Script</h2>
                 <span className="text-[10px] text-[#5a7187] bg-surface-dark px-2 py-1 rounded border border-border-dark uppercase tracking-wider">{activeLang}</span>
@@ -810,66 +871,81 @@ const AudioStage: React.FC<AudioStageProps> = ({ project, onUpdateOutputs, onUpd
             </div>
           </div>
 
-          {/* Advanced Area */}
-          <div className={`${showAdvanced ? 'flex-[0.4] min-h-0 opacity-100' : 'flex-[0.0001] min-h-0 h-0 overflow-hidden opacity-0'} transition-all duration-300 flex border-t border-border-dark`}>
-            {/* SSML Editor */}
-            <div className="w-1/2 border-r border-border-dark flex flex-col overflow-hidden bg-[#05080b]">
-              <div className="p-3 border-b border-border-dark flex items-center justify-between bg-surface-dark/50">
-                <div className="flex items-center gap-2">
-                  <h3 className="text-white font-black text-[10px] uppercase tracking-[0.2em]">SSML Editor</h3>
-                  {currentTranslation?.ssml && <span className="text-[8px] bg-blue-900/50 text-blue-400 px-1.5 rounded border border-blue-900">OVERRIDE ACTIVE</span>}
-                </div>
-                <div className="flex gap-2">
-                  {/* Reset Button */}
-                  {currentTranslation?.ssml && (
-                    <button onClick={handleResetSSML} className="text-[9px] text-red-400 hover:text-red-300 uppercase font-bold" title="Revert to auto-generated">Reset</button>
-                  )}
-                  {/* Save Button */}
-                  {isSSMLDirty && (
-                    <button onClick={handleSaveSSML} className="flex items-center gap-1 px-2 py-1 bg-primary text-white text-[9px] font-bold uppercase rounded animate-pulse">
-                      <span className="material-symbols-outlined text-[10px]">save</span> Save
-                    </button>
-                  )}
-                </div>
-              </div>
-              <div className="flex-1 p-0 overflow-hidden relative group">
-                <textarea
-                  value={localSSML}
-                  onChange={(e) => handleSSMLChange(e.target.value)}
-                  className="w-full h-full bg-[#05080b] text-[#93adc8] font-mono text-[10px] p-4 outline-none resize-none custom-scrollbar"
-                  spellCheck={false}
-                />
-                {ssmlWarnings.length > 0 && (
-                  <div className="absolute bottom-2 left-2 right-2 bg-yellow-900/90 border border-yellow-700 p-2 rounded backdrop-blur-sm pointer-events-none opacity-50 group-hover:opacity-100 transition-opacity">
-                    {ssmlWarnings.map((w, i) => <p key={i} className="text-[9px] text-yellow-200">{w}</p>)}
-                  </div>
-                )}
-              </div>
+          {/* Resize Handle */}
+          {showAdvanced && (
+            <div
+              onMouseDown={startResizing}
+              className={`h-1.5 bg-background-dark hover:bg-primary/50 cursor-row-resize flex items-center justify-center shrink-0 z-10 -mt-[1px] -mb-[1px] transition-colors ${isResizing ? 'bg-primary' : ''}`}
+            >
+              <div className="w-8 h-0.5 bg-border-dark rounded-full" />
             </div>
+          )}
 
-            {/* Glossary Editor */}
-            <div className="w-1/2 flex flex-col overflow-hidden bg-[#05080b]">
-              <div className="p-3 border-b border-border-dark bg-surface-dark/50 flex justify-between">
-                <h3 className="text-white font-black text-[10px] uppercase tracking-[0.2em]">Glossary Terms</h3>
-                <span className="text-[9px] text-[#5a7187]">{currentTerms.length} terms</span>
-              </div>
-              <div className="flex-1 p-3 overflow-y-auto custom-scrollbar space-y-1">
-                {currentTerms.map(t => (
-                  <div key={t.id} className="text-[9px] bg-surface-dark/50 border border-border-dark/30 rounded p-2 flex justify-between items-center group hover:border-border-dark hover:bg-surface-dark transition-all">
-                    <div className="flex-1 min-w-0 mr-2">
-                      <span className="text-white font-bold block truncate">{t.text}</span>
-                      <span className="font-mono text-primary opacity-80 block truncate text-[8px]">{t.ipa || '<no ipa>'}</span>
-                    </div>
-                    <div className="flex gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
-                      <button onClick={() => handlePlayIpa(t)} className={`p-1.5 rounded hover:bg-primary/20 hover:text-primary ${playingTermId === t.id ? 'text-primary animate-pulse' : 'text-[#5a7187]'}`}>
-                        <span className="material-symbols-outlined text-[14px]">{playingTermId === t.id ? 'graphic_eq' : 'volume_up'}</span>
-                      </button>
-                      <button onClick={() => { setEditingTermId(t.id); setTempTerm(t); }} className="p-1.5 rounded hover:bg-white/10 hover:text-white text-[#5a7187]">
-                        <span className="material-symbols-outlined text-[14px]">edit</span>
-                      </button>
-                    </div>
+          {/* Advanced Area */}
+          <div
+            style={{ flex: showAdvanced ? (1 - splitRatio) : 0 }}
+            className={`${showAdvanced ? 'min-h-[100px] opacity-100' : 'h-0 overflow-hidden opacity-0'} transition-[flex,opacity] duration-100 flex flex-col pt-0`}
+          >
+            <div className="flex-1 flex overflow-hidden border-t border-border-dark">
+              {/* SSML Editor */}
+              <div className="w-1/2 border-r border-border-dark flex flex-col overflow-hidden bg-[#05080b]">
+                <div className="p-3 border-b border-border-dark flex items-center justify-between bg-surface-dark/50 shrink-0">
+                  <div className="flex items-center gap-2">
+                    <h3 className="text-white font-black text-[10px] uppercase tracking-[0.2em]">SSML Editor</h3>
+                    {currentTranslation?.ssml && <span className="text-[8px] bg-blue-900/50 text-blue-400 px-1.5 rounded border border-blue-900">OVERRIDE ACTIVE</span>}
                   </div>
-                ))}
+                  <div className="flex gap-2">
+                    {/* Reset Button */}
+                    {currentTranslation?.ssml && (
+                      <button onClick={handleResetSSML} className="text-[9px] text-red-400 hover:text-red-300 uppercase font-bold" title="Revert to auto-generated">Reset</button>
+                    )}
+                    {/* Save Button */}
+                    {isSSMLDirty && (
+                      <button onClick={handleSaveSSML} className="flex items-center gap-1 px-2 py-1 bg-primary text-white text-[9px] font-bold uppercase rounded animate-pulse">
+                        <span className="material-symbols-outlined text-[10px]">save</span> Save
+                      </button>
+                    )}
+                  </div>
+                </div>
+                <div className="flex-1 p-0 overflow-hidden relative group">
+                  <textarea
+                    value={localSSML}
+                    onChange={(e) => handleSSMLChange(e.target.value)}
+                    className="w-full h-full bg-[#05080b] text-[#93adc8] font-mono text-[10px] p-4 outline-none resize-none custom-scrollbar"
+                    spellCheck={false}
+                  />
+                  {ssmlWarnings.length > 0 && (
+                    <div className="absolute bottom-2 left-2 right-2 bg-yellow-900/90 border border-yellow-700 p-2 rounded backdrop-blur-sm pointer-events-none opacity-50 group-hover:opacity-100 transition-opacity">
+                      {ssmlWarnings.map((w, i) => <p key={i} className="text-[9px] text-yellow-200">{w}</p>)}
+                    </div>
+                  )}
+                </div>
+              </div>
+
+              {/* Glossary Editor */}
+              <div className="w-1/2 flex flex-col overflow-hidden bg-[#05080b]">
+                <div className="p-3 border-b border-border-dark bg-surface-dark/50 flex justify-between shrink-0">
+                  <h3 className="text-white font-black text-[10px] uppercase tracking-[0.2em]">Glossary Terms</h3>
+                  <span className="text-[9px] text-[#5a7187]">{currentTerms.length} terms</span>
+                </div>
+                <div className="flex-1 p-3 overflow-y-auto custom-scrollbar space-y-1">
+                  {currentTerms.map(t => (
+                    <div key={t.id} className="text-[9px] bg-surface-dark/50 border border-border-dark/30 rounded p-2 flex justify-between items-center group hover:border-border-dark hover:bg-surface-dark transition-all">
+                      <div className="flex-1 min-w-0 mr-2">
+                        <span className="text-white font-bold block truncate">{t.text}</span>
+                        <span className="font-mono text-primary opacity-80 block truncate text-[8px]">{t.ipa || '<no ipa>'}</span>
+                      </div>
+                      <div className="flex gap-1 opacity-60 group-hover:opacity-100 transition-opacity">
+                        <button onClick={() => handlePlayIpa(t)} className={`p-1.5 rounded hover:bg-primary/20 hover:text-primary ${playingTermId === t.id ? 'text-primary animate-pulse' : 'text-[#5a7187]'}`}>
+                          <span className="material-symbols-outlined text-[14px]">{playingTermId === t.id ? 'graphic_eq' : 'volume_up'}</span>
+                        </button>
+                        <button onClick={() => { setEditingTermId(t.id); setTempTerm(t); }} className="p-1.5 rounded hover:bg-white/10 hover:text-white text-[#5a7187]">
+                          <span className="material-symbols-outlined text-[14px]">edit</span>
+                        </button>
+                      </div>
+                    </div>
+                  ))}
+                </div>
               </div>
             </div>
           </div>
@@ -885,59 +961,117 @@ const AudioStage: React.FC<AudioStageProps> = ({ project, onUpdateOutputs, onUpd
           <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-8">
             {/* Sliders */}
             <div className="space-y-6">
-              {/* Emphasis Slider */}
+              {/* 1. Tone/Ambience */}
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
-                  <label className="text-[10px] font-black text-white uppercase">Emphasis</label>
+                  <label className="text-[10px] font-black text-white uppercase">Tone/Ambience</label>
                   <span className="px-1.5 py-0.5 bg-surface-dark rounded font-mono text-primary text-[9px] border border-border-dark">
-                    {settings.emphasis.toFixed(2)}
+                    {settings.ambience.toFixed(2)}
                   </span>
+                </div>
+                <div className="flex justify-between px-1 mb-1">
+                  <span className="text-[8px] text-[#5a7187] uppercase">Calm</span>
+                  <span className="text-[8px] text-[#5a7187] uppercase">Dramatic</span>
                 </div>
                 <input
                   type="range"
                   min="0"
-                  max="2"
+                  max="1"
                   step="0.05"
-                  value={settings.emphasis}
-                  onChange={(e) => handleSliderChange('emphasis', parseFloat(e.target.value))}
+                  value={settings.ambience}
+                  onChange={(e) => handleSliderChange('ambience', parseFloat(e.target.value))}
                   className="w-full h-1 bg-border-dark rounded-full appearance-none accent-primary cursor-pointer"
                 />
               </div>
 
-              {/* Solemnity Slider */}
+              {/* 2. Speaking Rate */}
               <div className="space-y-3">
                 <div className="flex justify-between items-center">
-                  <label className="text-[10px] font-black text-white uppercase">Solemnity</label>
-                  <span className="px-1.5 py-0.5 bg-surface-dark rounded font-mono text-primary text-[9px] border border-border-dark">
-                    {settings.solemnity.toFixed(2)}
-                  </span>
-                </div>
-                <input
-                  type="range"
-                  min="0"
-                  max="2"
-                  step="0.05"
-                  value={settings.solemnity}
-                  onChange={(e) => handleSliderChange('solemnity', parseFloat(e.target.value))}
-                  className="w-full h-1 bg-border-dark rounded-full appearance-none accent-primary cursor-pointer"
-                />
-              </div>
-
-              {/* Pacing Slider */}
-              <div className="space-y-3">
-                <div className="flex justify-between items-center">
-                  <label className="text-[10px] font-black text-white uppercase">Pacing</label>
+                  <label className="text-[10px] font-black text-white uppercase">Speaking Rate</label>
                   <span className="px-1.5 py-0.5 bg-surface-dark rounded font-mono text-primary text-[9px] border border-border-dark">
                     {settings.pacing.toFixed(2)}x
                   </span>
                 </div>
+                <div className="flex justify-between px-1 mb-1">
+                  <span className="text-[8px] text-[#5a7187] uppercase">Slow</span>
+                  <span className="text-[8px] text-[#5a7187] uppercase">Fast</span>
+                </div>
                 <input
                   type="range"
                   min="0.5"
-                  max="2"
+                  max="1.5"
                   step="0.05"
                   value={settings.pacing}
                   onChange={(e) => handleSliderChange('pacing', parseFloat(e.target.value))}
+                  className="w-full h-1 bg-border-dark rounded-full appearance-none accent-primary cursor-pointer"
+                />
+              </div>
+
+              {/* 3. Voice Pitch */}
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] font-black text-white uppercase">Voice Pitch</label>
+                  <span className="px-1.5 py-0.5 bg-surface-dark rounded font-mono text-primary text-[9px] border border-border-dark">
+                    {settings.pitch.toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex justify-between px-1 mb-1">
+                  <span className="text-[8px] text-[#5a7187] uppercase">Deeper</span>
+                  <span className="text-[8px] text-[#5a7187] uppercase">Brighter</span>
+                </div>
+                <input
+                  type="range"
+                  min="0.5"
+                  max="1.5"
+                  step="0.05"
+                  value={settings.pitch}
+                  onChange={(e) => handleSliderChange('pitch', parseFloat(e.target.value))}
+                  className="w-full h-1 bg-border-dark rounded-full appearance-none accent-primary cursor-pointer"
+                />
+              </div>
+
+              {/* 4. Expressiveness */}
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] font-black text-white uppercase">Expressiveness</label>
+                  <span className="px-1.5 py-0.5 bg-surface-dark rounded font-mono text-primary text-[9px] border border-border-dark">
+                    {settings.expressiveness.toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex justify-between px-1 mb-1">
+                  <span className="text-[8px] text-[#5a7187] uppercase">Flat</span>
+                  <span className="text-[8px] text-[#5a7187] uppercase">Lively</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={settings.expressiveness}
+                  onChange={(e) => handleSliderChange('expressiveness', parseFloat(e.target.value))}
+                  className="w-full h-1 bg-border-dark rounded-full appearance-none accent-primary cursor-pointer"
+                />
+              </div>
+
+              {/* 5. Pausing/Rhythm */}
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] font-black text-white uppercase">Pausing/Rhythm</label>
+                  <span className="px-1.5 py-0.5 bg-surface-dark rounded font-mono text-primary text-[9px] border border-border-dark">
+                    {settings.pausing.toFixed(2)}
+                  </span>
+                </div>
+                <div className="flex justify-between px-1 mb-1">
+                  <span className="text-[8px] text-[#5a7187] uppercase">Minimal</span>
+                  <span className="text-[8px] text-[#5a7187] uppercase">Dramatic</span>
+                </div>
+                <input
+                  type="range"
+                  min="0"
+                  max="1"
+                  step="0.05"
+                  value={settings.pausing}
+                  onChange={(e) => handleSliderChange('pausing', parseFloat(e.target.value))}
                   className="w-full h-1 bg-border-dark rounded-full appearance-none accent-primary cursor-pointer"
                 />
               </div>
@@ -958,7 +1092,7 @@ const AudioStage: React.FC<AudioStageProps> = ({ project, onUpdateOutputs, onUpd
                 <span className="material-symbols-outlined text-sm">
                   {isGeneratingPreview ? 'hourglass_top' : isPlaying ? 'stop_circle' : 'play_circle'}
                 </span>
-                {isGeneratingPreview ? 'Generating...' : isPlaying ? 'Stop Preview' : 'Preview Segment'}
+                {isGeneratingPreview ? 'Generating...' : isPlaying ? 'Stop Preview' : 'Generate Preview'}
               </button>
 
               <button

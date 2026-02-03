@@ -75,9 +75,12 @@ export interface VoiceProfile {
 export interface TTSSettings {
   vendor: TTSVendor;
   voiceId: string;
-  emphasis: number;      // 0.0 - 2.0
-  solemnity: number;     // 0.0 - 2.0
-  pacing: number;        // 0.5 - 2.0
+  // Engineering Sliders
+  ambience: number;       // 0.0 (Calm) - 1.0 (Dramatic)
+  pacing: number;         // 0.5 (Slow) - 1.5 (Fast)
+  pitch: number;          // 0.5 (Deep) - 1.5 (High)
+  expressiveness: number; // 0.0 (Flat) - 1.0 (Lively)
+  pausing: number;        // 0.0 (Minimal) - 1.0 (Dramatic)
   format: 'mp3' | 'wav' | 'ogg';
 }
 
