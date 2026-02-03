@@ -495,18 +495,54 @@ const AudioStage: React.FC<AudioStageProps> = ({ project, onUpdateOutputs, onUpd
 
       console.log('[TTS Generate] Starting generation for', activeLang);
 
-      const response = await ai.models.generateContent({
-        model: "gemini-2.5-flash-preview-tts",
-        contents: [{ parts: [{ text: prompt }] }],
-        config: {
-          responseModalities: [Modality.AUDIO],
-          speechConfig: {
-            voiceConfig: {
-              prebuiltVoiceConfig: { voiceName: settings.voiceId }
+      let response;
+
+      try {
+        response = await ai.models.generateContent({
+          model: "gemini-2.5-flash-preview-tts",
+          contents: [{ parts: [{ text: prompt }] }],
+          config: {
+            responseModalities: [Modality.AUDIO],
+            speechConfig: {
+              voiceConfig: {
+                prebuiltVoiceConfig: { voiceName: settings.voiceId }
+              }
             }
+          },
+        });
+      } catch (genError) {
+        // If SSML failed, try fallback to Text (only if we tried SSML)
+        if (vendorSupportsSSML(settings.vendor)) {
+          console.warn('[TTS Generate] SSML generation failed, falling back to Plan Text + Guide. Error:', genError);
+
+          // Construct fallback prompt
+          const content = currentTranslation.content;
+          const termsWithIPA = currentTerms.filter(t => t.ipa);
+          let fallbackPrompt = content;
+          if (termsWithIPA.length > 0) {
+            const pronunciationGuide = termsWithIPA
+              .map(t => `"${t.text}" should be pronounced as "${t.ipa}"`)
+              .join(', ');
+            fallbackPrompt = `${content}\n\n[Pronunciation guide: ${pronunciationGuide}]`;
           }
-        },
-      });
+
+          // Retry Generation
+          response = await ai.models.generateContent({
+            model: "gemini-2.5-flash-preview-tts",
+            contents: [{ parts: [{ text: fallbackPrompt }] }],
+            config: {
+              responseModalities: [Modality.AUDIO],
+              speechConfig: {
+                voiceConfig: {
+                  prebuiltVoiceConfig: { voiceName: settings.voiceId }
+                }
+              }
+            },
+          });
+        } else {
+          throw genError; // Re-throw if it wasn't SSML related or we already tried text
+        }
+      }
 
       clearInterval(progressInterval);
 
