@@ -522,7 +522,7 @@ const AudioStage: React.FC<AudioStageProps> = ({ project, onUpdateOutputs }) => 
         />
 
         {/* Left Panel: Vendor & Voice Selection */}
-        <aside className="w-80 border-r border-border-dark flex flex-col bg-background-dark/50 overflow-hidden">
+        <aside className="w-80 border-r border-border-dark flex flex-col bg-background-dark/50 overflow-hidden shrink-0">
           {/* Vendor Selector */}
           <div className="p-4 border-b border-border-dark">
             <h3 className="text-white font-black text-[10px] uppercase tracking-widest mb-3">TTS Provider</h3>
@@ -587,23 +587,93 @@ const AudioStage: React.FC<AudioStageProps> = ({ project, onUpdateOutputs }) => 
           </div>
         </aside>
 
-        {/* Center Panel: Prosody Controls */}
-        <section className="flex-1 flex flex-col bg-background-dark border-r border-border-dark overflow-y-auto custom-scrollbar">
-          <div className="p-10 max-w-4xl mx-auto w-full">
-            <div className="mb-12">
-              <h2 className="text-2xl font-black text-white tracking-tight uppercase">Vocal Engineering</h2>
-              <p className="text-[#93adc8] text-xs mt-2 uppercase">Fine-tuning {activeLang} output for museum exhibits</p>
+        {/* Center Panel: Content (Text, SSML, terms) */}
+        <section className="flex-1 flex flex-col bg-background-dark overflow-hidden">
+          {/* Upper Part: Final Text (70%) */}
+          <div className="flex-[0.7] border-b border-border-dark p-6 flex flex-col overflow-hidden">
+            <div className="flex justify-between items-center mb-4">
+              <h2 className="text-lg font-black text-white tracking-tight uppercase">Narration Script</h2>
+              <span className="text-[10px] text-[#5a7187] bg-surface-dark px-2 py-1 rounded border border-border-dark uppercase tracking-wider">
+                {activeLang}
+              </span>
+            </div>
+            <div className="flex-1 bg-surface-dark/30 rounded-xl border border-border-dark/50 p-6 overflow-y-auto custom-scrollbar shadow-inner">
+              <p className="text-[#e1e1e1] text-sm leading-relaxed whitespace-pre-wrap font-serif">
+                {currentTranslation?.content || <span className="text-[#5a7187] italic">No translation content available.</span>}
+              </p>
+            </div>
+          </div>
+
+          {/* Lower Part: Split SSML & Terms (30%) */}
+          <div className="flex-[0.3] flex border-t border-border-dark min-h-0">
+            {/* Left: SSML Preview */}
+            <div className="w-1/2 border-r border-border-dark flex flex-col overflow-hidden bg-[#05080b]">
+              <div className="p-3 border-b border-border-dark flex items-center justify-between bg-surface-dark/50">
+                <h3 className="text-white font-black text-[10px] uppercase tracking-[0.2em]">SSML Preview</h3>
+                {vendorSupportsSSML(settings.vendor) ? (
+                  <span className="text-[8px] px-2 py-0.5 bg-green-900/50 text-green-400 rounded uppercase font-bold">Enabled</span>
+                ) : (
+                  <span className="text-[8px] px-2 py-0.5 bg-yellow-900/50 text-yellow-400 rounded uppercase font-bold">Limited</span>
+                )}
+              </div>
+
+              {/* SSML Warnings */}
+              {ssmlWarnings.length > 0 && (
+                <div className="px-3 py-1 bg-yellow-900/20 border-b border-yellow-900/50">
+                  {ssmlWarnings.map((warning, i) => (
+                    <p key={i} className="text-[8px] text-yellow-400 flex items-center gap-2">
+                      <span className="material-symbols-outlined text-[10px]">warning</span>
+                      {warning}
+                    </p>
+                  ))}
+                </div>
+              )}
+
+              <div className="flex-1 p-3 font-mono text-[9px] leading-relaxed overflow-y-auto custom-scrollbar">
+                <pre className="text-[#93adc8] whitespace-pre-wrap break-words">
+                  {ssmlPreview || '<No content available>'}
+                </pre>
+              </div>
             </div>
 
-            <div className="space-y-12">
-              {/* Emphasis Slider */}
-              <div className="space-y-4">
-                <div className="flex justify-between items-center">
-                  <div>
-                    <label className="text-xs font-black text-white uppercase">Emphasis</label>
-                    <p className="text-[9px] text-[#5a7187] mt-0.5">Vocal stress on key exhibition terms</p>
+            {/* Right: Glossary Terms */}
+            <div className="w-1/2 flex flex-col overflow-hidden bg-[#05080b]">
+              <div className="p-3 border-b border-border-dark bg-surface-dark/50">
+                <h3 className="text-white font-black text-[10px] uppercase tracking-[0.2em] flex justify-between items-center">
+                  Glossary Terms
+                  <span className="opacity-60">{currentTerms.length}</span>
+                </h3>
+              </div>
+              <div className="flex-1 p-3 overflow-y-auto custom-scrollbar space-y-1">
+                {currentTerms.map(t => (
+                  <div key={t.id} className="text-[9px] bg-surface-dark/50 border border-border-dark/30 rounded p-2 flex justify-between items-center group hover:border-border-dark">
+                    <span className="text-white font-medium truncate flex-1">{t.text}</span>
+                    <span className="font-mono text-primary ml-2 opacity-80 group-hover:opacity-100">{t.ipa || '—'}</span>
                   </div>
-                  <span className="px-2 py-1 bg-surface-dark rounded font-mono text-primary text-xs border border-border-dark">
+                ))}
+                {currentTerms.length === 0 && (
+                  <p className="text-[9px] text-[#5a7187] italic text-center mt-4">No glossary terms detected</p>
+                )}
+              </div>
+            </div>
+          </div>
+        </section>
+
+        {/* Right Panel: Controls & Generation */}
+        <aside className="w-80 border-l border-border-dark flex flex-col bg-background-dark/50 overflow-hidden shrink-0">
+          <div className="p-6 border-b border-border-dark">
+            <h2 className="text-lg font-black text-white tracking-tight uppercase mb-1">Engineering</h2>
+            <p className="text-[9px] text-[#93adc8] uppercase">Vocal Parameters</p>
+          </div>
+
+          <div className="flex-1 overflow-y-auto custom-scrollbar p-6 space-y-8">
+            {/* Sliders */}
+            <div className="space-y-6">
+              {/* Emphasis Slider */}
+              <div className="space-y-3">
+                <div className="flex justify-between items-center">
+                  <label className="text-[10px] font-black text-white uppercase">Emphasis</label>
+                  <span className="px-1.5 py-0.5 bg-surface-dark rounded font-mono text-primary text-[9px] border border-border-dark">
                     {settings.emphasis.toFixed(2)}
                   </span>
                 </div>
@@ -619,13 +689,10 @@ const AudioStage: React.FC<AudioStageProps> = ({ project, onUpdateOutputs }) => 
               </div>
 
               {/* Solemnity Slider */}
-              <div className="space-y-4">
+              <div className="space-y-3">
                 <div className="flex justify-between items-center">
-                  <div>
-                    <label className="text-xs font-black text-white uppercase">Solemnity</label>
-                    <p className="text-[9px] text-[#5a7187] mt-0.5">Emotional weight for sensitive history</p>
-                  </div>
-                  <span className="px-2 py-1 bg-surface-dark rounded font-mono text-primary text-xs border border-border-dark">
+                  <label className="text-[10px] font-black text-white uppercase">Solemnity</label>
+                  <span className="px-1.5 py-0.5 bg-surface-dark rounded font-mono text-primary text-[9px] border border-border-dark">
                     {settings.solemnity.toFixed(2)}
                   </span>
                 </div>
@@ -641,13 +708,10 @@ const AudioStage: React.FC<AudioStageProps> = ({ project, onUpdateOutputs }) => 
               </div>
 
               {/* Pacing Slider */}
-              <div className="space-y-4">
+              <div className="space-y-3">
                 <div className="flex justify-between items-center">
-                  <div>
-                    <label className="text-xs font-black text-white uppercase">Pacing</label>
-                    <p className="text-[9px] text-[#5a7187] mt-0.5">Clear speech rate for visitors</p>
-                  </div>
-                  <span className="px-2 py-1 bg-surface-dark rounded font-mono text-primary text-xs border border-border-dark">
+                  <label className="text-[10px] font-black text-white uppercase">Pacing</label>
+                  <span className="px-1.5 py-0.5 bg-surface-dark rounded font-mono text-primary text-[9px] border border-border-dark">
                     {settings.pacing.toFixed(2)}x
                   </span>
                 </div>
@@ -663,175 +727,88 @@ const AudioStage: React.FC<AudioStageProps> = ({ project, onUpdateOutputs }) => 
               </div>
             </div>
 
-            {/* Preview Section */}
-            <div className="mt-16 p-8 rounded-xl bg-surface-dark/30 border border-border-dark border-dashed flex flex-col items-center gap-6">
-              <div className="w-full h-16 flex items-end justify-center gap-1">
-                {Array.from({ length: 24 }).map((_, i) => (
-                  <div
-                    key={i}
-                    className={`w-2 rounded-full transition-all ${isPlaying && !isGeneratingPreview
-                      ? 'bg-primary animate-pulse'
-                      : isGeneratingPreview
-                        ? 'bg-yellow-500/50 animate-pulse'
-                        : 'bg-primary/20'
-                      }`}
-                    style={{ height: isGeneratingPreview ? '30%' : `${Math.random() * 100}%` }}
-                  />
-                ))}
-              </div>
+            {/* Generation Buttons */}
+            <div className="pt-6 border-t border-border-dark/50 space-y-4">
               <button
                 onClick={handlePreview}
                 disabled={!currentTranslation?.content}
-                className={`flex items-center gap-3 px-10 py-3 font-black uppercase tracking-widest rounded text-[11px] shadow-2xl transition-all ${isPlaying && !isGeneratingPreview
+                className={`w-full py-3 font-black uppercase tracking-widest rounded text-[10px] transition-all flex items-center justify-center gap-2 ${isPlaying && !isGeneratingPreview
                   ? 'bg-red-600 text-white hover:bg-red-700'
                   : isGeneratingPreview
                     ? 'bg-yellow-500 text-black cursor-wait'
-                    : 'bg-white text-black hover:-translate-y-0.5'
+                    : 'bg-surface-dark border border-border-dark text-white hover:bg-surface-dark/80 hover:border-primary/50'
                   } ${!currentTranslation?.content ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
-                <span className="material-symbols-outlined">
+                <span className="material-symbols-outlined text-sm">
                   {isGeneratingPreview ? 'hourglass_top' : isPlaying ? 'stop_circle' : 'play_circle'}
                 </span>
-                {isGeneratingPreview
-                  ? 'Generating Audio...'
-                  : isPlaying
-                    ? 'Stop Preview'
-                    : `Preview ${activeLang} Audio`}
+                {isGeneratingPreview ? 'Generating...' : isPlaying ? 'Stop Preview' : 'Preview Segment'}
               </button>
-            </div>
 
-            {/* Generate Button */}
-            <div className="mt-8 flex justify-center">
               <button
                 onClick={handleGenerate}
                 disabled={isGenerating || !currentTranslation?.content}
-                className={`flex items-center gap-3 px-12 py-4 font-black uppercase tracking-widest rounded text-[12px] transition-all ${isGenerating
+                className={`w-full py-4 font-black uppercase tracking-widest rounded text-[11px] transition-all flex items-center justify-center gap-2 ${isGenerating
                   ? 'bg-orange-500/50 text-white cursor-wait'
-                  : 'bg-orange-500 text-white hover:bg-orange-600 shadow-lg shadow-orange-500/30'
+                  : 'bg-orange-500 text-white hover:bg-orange-600 shadow-lg shadow-orange-500/20'
                   } ${!currentTranslation?.content ? 'opacity-50 cursor-not-allowed' : ''}`}
               >
-                <span className="material-symbols-outlined">{isGenerating ? 'hourglass_top' : 'record_voice_over'}</span>
-                {isGenerating ? `Generating... ${generationProgress}%` : 'Generate Full Audio'}
+                <span className="material-symbols-outlined text-sm">{isGenerating ? 'hourglass_top' : 'record_voice_over'}</span>
+                {isGenerating ? `${generationProgress}%` : 'Generate Full'}
               </button>
             </div>
 
-            {/* Progress Bar */}
-            {isGenerating && (
-              <div className="mt-4 w-full bg-border-dark rounded-full h-2 overflow-hidden">
-                <div
-                  className="bg-museum-gold h-full transition-all duration-300"
-                  style={{ width: `${generationProgress}%` }}
-                />
-              </div>
-            )}
-          </div>
-        </section>
-
-        {/* Right Panel: SSML Preview & Output */}
-        <aside className="w-96 flex flex-col bg-[#05080b] overflow-hidden">
-          {/* SSML Preview Header */}
-          <div className="p-4 border-b border-border-dark flex items-center justify-between">
-            <h3 className="text-white font-black text-[10px] uppercase tracking-[0.2em]">SSML Preview</h3>
-            {vendorSupportsSSML(settings.vendor) ? (
-              <span className="text-[8px] px-2 py-0.5 bg-green-900/50 text-green-400 rounded uppercase font-bold">SSML Enabled</span>
-            ) : (
-              <span className="text-[8px] px-2 py-0.5 bg-yellow-900/50 text-yellow-400 rounded uppercase font-bold">Limited</span>
-            )}
-          </div>
-
-          {/* SSML Warnings */}
-          {ssmlWarnings.length > 0 && (
-            <div className="px-4 py-2 bg-yellow-900/20 border-b border-yellow-900/50">
-              {ssmlWarnings.map((warning, i) => (
-                <p key={i} className="text-[9px] text-yellow-400 flex items-center gap-2">
-                  <span className="material-symbols-outlined text-[12px]">warning</span>
-                  {warning}
-                </p>
-              ))}
-            </div>
-          )}
-
-          {/* SSML Code Preview */}
-          <div className="flex-1 p-4 font-mono text-[10px] leading-relaxed overflow-y-auto custom-scrollbar">
-            <pre className="text-[#93adc8] whitespace-pre-wrap break-words">
-              {ssmlPreview || '<No content available>'}
-            </pre>
-          </div>
-
-          {/* Glossary Terms Preview */}
-          <div className="p-4 border-t border-border-dark max-h-48 overflow-y-auto custom-scrollbar">
-            <p className="text-[10px] font-black text-primary uppercase mb-3">Glossary Terms ({currentTerms.length})</p>
-            <div className="space-y-2">
-              {currentTerms.slice(0, 10).map(t => (
-                <div key={t.id} className="text-[9px] text-slate-500 flex justify-between">
-                  <span className="text-white truncate flex-1">{t.text}</span>
-                  <span className="font-mono text-primary ml-2">{t.ipa || '—'}</span>
-                </div>
-              ))}
-              {currentTerms.length > 10 && (
-                <p className="text-[9px] text-[#5a7187]">+{currentTerms.length - 10} more...</p>
-              )}
-            </div>
-          </div>
-
-          {/* Generated Outputs */}
-          <div className="p-4 border-t border-border-dark">
-            <p className="text-[10px] font-black text-white uppercase mb-3">Generated Audio</p>
-            <div className="space-y-2 max-h-48 overflow-y-auto custom-scrollbar">
-              {outputs.length === 0 ? (
-                <p className="text-[9px] text-[#5a7187] italic">No audio generated yet</p>
-              ) : (
-                outputs.map(output => (
-                  <div
-                    key={output.id}
-                    className="p-3 bg-surface-dark rounded border border-border-dark flex items-center justify-between"
-                  >
-                    <div className="flex-1 min-w-0">
-                      <p className="text-[10px] text-white font-bold truncate">{output.fileName}</p>
-                      <p className="text-[8px] text-[#5a7187] uppercase">
-                        {output.status === 'completed' ? 'Ready' : output.status === 'error' ? 'Error' : 'Generating...'}
-                      </p>
-                    </div>
-                    <div className="flex items-center gap-1">
-                      {output.status === 'completed' && output.audioUrl && (
-                        <>
-                          <button
-                            onClick={() => handlePlayOutput(output)}
-                            className={`p-2 rounded ${playingOutputId === output.id ? 'bg-primary/30 text-primary' : 'hover:bg-primary/20 text-primary'}`}
-                            title={playingOutputId === output.id ? 'Stop' : 'Play'}
-                          >
-                            <span className="material-symbols-outlined text-[16px]">
-                              {playingOutputId === output.id ? 'stop' : 'play_arrow'}
-                            </span>
-                          </button>
-                          <button
-                            onClick={() => handleDownload(output)}
-                            className="p-2 hover:bg-primary/20 rounded text-primary"
-                            title="Download"
-                          >
-                            <span className="material-symbols-outlined text-[16px]">download</span>
-                          </button>
-                        </>
-                      )}
-                      {output.status === 'generating' && (
-                        <span className="material-symbols-outlined text-primary animate-spin text-[16px]">refresh</span>
-                      )}
-                      {output.status === 'error' && (
-                        <span className="material-symbols-outlined text-red-500 text-[16px]">error</span>
-                      )}
-                      {output.status !== 'generating' && (
+            {/* Generated Outputs List */}
+            <div className="pt-6 border-t border-border-dark/50">
+              <p className="text-[10px] font-black text-white uppercase mb-4">Output Library</p>
+              <div className="space-y-2">
+                {outputs.length === 0 ? (
+                  <p className="text-[9px] text-[#5a7187] italic text-center py-4 bg-surface-dark/30 rounded border border-border-dark/30">No audio generated</p>
+                ) : (
+                  outputs.map(output => (
+                    <div
+                      key={output.id}
+                      className="p-3 bg-surface-dark rounded border border-border-dark flex items-center justify-between group hover:border-border-dark/80"
+                    >
+                      <div className="flex-1 min-w-0 mr-2">
+                        <p className="text-[9px] text-white font-bold truncate" title={output.fileName}>{output.fileName}</p>
+                        <p className="text-[8px] text-[#5a7187] uppercase mt-0.5">
+                          {output.status === 'completed' ? <span className="text-emerald-500">Ready</span> : output.status === 'error' ? <span className="text-red-500">Failed</span> : 'Processing...'}
+                        </p>
+                      </div>
+                      <div className="flex items-center gap-1">
+                        {output.status === 'completed' && output.audioUrl && (
+                          <>
+                            <button
+                              onClick={() => handlePlayOutput(output)}
+                              className={`p-1.5 rounded transition-all ${playingOutputId === output.id ? 'bg-primary text-white' : 'text-[#5a7187] hover:text-primary hover:bg-primary/10'}`}
+                              title={playingOutputId === output.id ? 'Stop' : 'Play'}
+                            >
+                              <span className="material-symbols-outlined text-[14px]">
+                                {playingOutputId === output.id ? 'stop' : 'play_arrow'}
+                              </span>
+                            </button>
+                            <button
+                              onClick={() => handleDownload(output)}
+                              className="p-1.5 rounded text-[#5a7187] hover:text-white hover:bg-white/10 transition-all"
+                              title="Download"
+                            >
+                              <span className="material-symbols-outlined text-[14px]">download</span>
+                            </button>
+                          </>
+                        )}
                         <button
                           onClick={() => handleDeleteOutput(output.id)}
-                          className="p-2 hover:bg-red-500/20 rounded text-red-400"
+                          className="p-1.5 rounded text-[#5a7187] hover:text-red-400 hover:bg-red-500/10 transition-all opacity-0 group-hover:opacity-100"
                           title="Delete"
                         >
-                          <span className="material-symbols-outlined text-[16px]">delete</span>
+                          <span className="material-symbols-outlined text-[14px]">delete</span>
                         </button>
-                      )}
+                      </div>
                     </div>
-                  </div>
-                ))
-              )}
+                  ))
+                )}
+              </div>
             </div>
           </div>
         </aside>
